@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
-
+from django.contrib.auth.password_validation import validate_password
 
 class LoginSerializer(serializers.Serializer):
     phone = serializers.CharField(
