@@ -1,37 +1,35 @@
+import re
+
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from django.contrib.auth.password_validation import validate_password
 
-class LoginSerializer(serializers.Serializer):
-    phone = serializers.CharField(
-        max_length=20,
-    )
+def validate_phone(value: str) -> str:
+    phone = value.strip()
 
-    password = serializers.CharField(
-        write_only=True,
-    )
+    if not re.fullmatch(r'\+7\d{10}', phone):
+        raise serializers.ValidationError(
+            'Введите корректный номер телефона в формате +7XXXXXXXXXX.'
+        )
+
+    return phone
+
+class LoginSerializer(serializers.Serializer):
+    phone = serializers.CharField(max_length=20)
+    password = serializers.CharField(write_only=True)
+
+    def validate_phone(self, value):
+        return validate_phone(value)
 
 
 class RegisterSerializer(serializers.Serializer):
-    phone = serializers.CharField(
-        max_length=20,
-    )
+    phone = serializers.CharField(max_length=20)
+    password = serializers.CharField(write_only=True, min_length=8)
+    full_name = serializers.CharField(max_length=250, required=False, allow_blank=True)
+    birthday = serializers.DateField(required=False, allow_null=True)
 
-    password = serializers.CharField(
-        write_only=True,
-        min_length=8,
-    )
-
-    full_name = serializers.CharField(
-        max_length=250,
-        required=False,
-        allow_blank=True,
-    )
-
-    birthday = serializers.DateField(
-        required=False,
-        allow_null=True,
-    )
+    def validate_phone(self, value):
+        return validate_phone(value)
 
     def validate_password(self, value):
         validate_password(value)
