@@ -22,4 +22,9 @@ urlpatterns = [
         '',
         include(router.urls),
     ),
+
+    path(
+        'auth/',
+        include('users.auth.urls'),
+    ),
 ]
