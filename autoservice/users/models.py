@@ -6,20 +6,11 @@ from django.contrib.auth.models import AbstractUser
 from .managers import CustomUserManager
 
 
-# class CustomUser(AbstractUser):
-#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-#     messenger_user_id = models.CharField(max_length=255,unique=True,null=True,blank=True)
-#     full_name = models.CharField(verbose_name="ФИО", max_length=250, null=True, blank=True)
-#     phone = models.CharField(verbose_name="Номер телефона", max_length=20, unique=True)
-#     birthday = models.DateField(verbose_name="Дата рождения",null=True,blank=True)
-#
-#     USERNAME_FIELD = 'phone'
-#     REQUIRED_FIELDS = ['username']
-#
-#     objects = CustomUserManager()
-#
-#     def __str__(self):
-#         return self.phone
+class UserRole(models.TextChoices):
+    USER = 'user', 'Пользователь'
+    MECHANIC = 'mechanic', 'Механик'
+    ADMIN = 'admin', 'Администратор'
+
 
 class CustomUser(AbstractUser):
     id = models.UUIDField(
@@ -59,6 +50,13 @@ class CustomUser(AbstractUser):
         verbose_name='Дата рождения',
         null=True,
         blank=True,
+    )
+
+    role = models.CharField(
+        verbose_name='Роль',
+        max_length=20,
+        choices=UserRole.choices,
+        default=UserRole.USER,
     )
 
     USERNAME_FIELD = 'phone'

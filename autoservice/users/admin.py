@@ -1,9 +1,11 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .forms import CustomUserCreationForm,CustomUserChangeForm
+from .forms import CustomUserCreationForm, CustomUserChangeForm
 from .models import CustomUser
 
+
+@admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
     add_form = CustomUserCreationForm
     form = CustomUserChangeForm
@@ -11,7 +13,8 @@ class CustomUserAdmin(UserAdmin):
 
     list_display = (
         'phone',
-        'full_name'
+        'full_name',
+        'role',
     )
 
     search_fields = (
@@ -19,13 +22,34 @@ class CustomUserAdmin(UserAdmin):
         'full_name',
     )
 
+    list_filter = (
+        'role',
+        'is_active',
+    )
+
     ordering = (
         'phone',
     )
 
     fieldsets = (
-        (None, {'fields': ('phone', 'password')}),
-        ('Personal info', {'fields': ('full_name', 'birthday', 'messenger_user_id')}),
+        (None, {
+            'fields': (
+                'phone',
+                'password',
+            ),
+        }),
+        ('Personal info', {
+            'fields': (
+                'full_name',
+                'birthday',
+                'messenger_user_id',
+            ),
+        }),
+        ('Role', {
+            'fields': (
+                'role',
+            ),
+        }),
         ('Permissions', {
             'fields': (
                 'is_active',
@@ -35,7 +59,11 @@ class CustomUserAdmin(UserAdmin):
                 'user_permissions',
             ),
         }),
-        ('Important dates', {'fields': ('last_login',)}),
+        ('Important dates', {
+            'fields': (
+                'last_login',
+            ),
+        }),
     )
 
     add_fieldsets = (
@@ -45,6 +73,7 @@ class CustomUserAdmin(UserAdmin):
                 'phone',
                 'full_name',
                 'birthday',
+                'role',
                 'password1',
                 'password2',
                 'is_staff',
@@ -52,5 +81,3 @@ class CustomUserAdmin(UserAdmin):
             ),
         }),
     )
-
-admin.site.register(CustomUser, CustomUserAdmin)
