@@ -33,10 +33,9 @@ class CustomUser(AbstractUser):
         blank=True,
     )
 
-    full_name = models.CharField(
-        verbose_name='ФИО',
-        max_length=250,
-        null=True,
+    patronymic = models.CharField(
+        verbose_name='Отчество',
+        max_length=150,
         blank=True,
     )
 
@@ -63,3 +62,14 @@ class CustomUser(AbstractUser):
     REQUIRED_FIELDS = []
 
     objects = CustomUserManager()
+
+    def get_full_name(self) -> str:
+        return ' '.join(
+            part
+            for part in (
+                self.last_name,
+                self.first_name,
+                self.patronymic,
+            )
+            if part
+        )

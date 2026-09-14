@@ -13,13 +13,17 @@ class CustomUserAdmin(UserAdmin):
 
     list_display = (
         'phone',
-        'full_name',
+        'last_name',
+        'first_name',
+        'patronymic',
         'role',
     )
 
     search_fields = (
         'phone',
-        'full_name',
+        'last_name',
+        'first_name',
+        'patronymic',
     )
 
     list_filter = (
@@ -28,7 +32,8 @@ class CustomUserAdmin(UserAdmin):
     )
 
     ordering = (
-        'phone',
+        'last_name',
+        'first_name',
     )
 
     fieldsets = (
@@ -40,7 +45,9 @@ class CustomUserAdmin(UserAdmin):
         }),
         ('Personal info', {
             'fields': (
-                'full_name',
+                'last_name',
+                'first_name',
+                'patronymic',
                 'birthday',
                 'messenger_user_id',
             ),
@@ -71,7 +78,9 @@ class CustomUserAdmin(UserAdmin):
             'classes': ('wide',),
             'fields': (
                 'phone',
-                'full_name',
+                'last_name',
+                'first_name',
+                'patronymic',
                 'birthday',
                 'role',
                 'password1',

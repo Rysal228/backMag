@@ -14,6 +14,7 @@ def validate_phone(value: str) -> str:
 
     return phone
 
+
 class LoginSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=20)
     password = serializers.CharField(write_only=True)
@@ -24,15 +25,39 @@ class LoginSerializer(serializers.Serializer):
 
 class RegisterSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=20)
-    password = serializers.CharField(write_only=True, min_length=8)
-    full_name = serializers.CharField(max_length=250, required=False, allow_blank=True)
-    birthday = serializers.DateField(required=False, allow_null=True)
+
+    password = serializers.CharField(
+        write_only=True,
+        min_length=8,
+    )
+
+    firstName = serializers.CharField(
+        source='first_name',
+        max_length=150,
+    )
+
+    lastName = serializers.CharField(
+        source='last_name',
+        max_length=150,
+    )
+
+    patronymic = serializers.CharField(
+        max_length=150,
+        required=False,
+        allow_blank=True,
+    )
+
+    birthday = serializers.DateField(
+        required=False,
+        allow_null=True,
+    )
 
     def validate_phone(self, value):
         return validate_phone(value)
 
     def validate_password(self, value):
         validate_password(value)
+
         return value
 
 
@@ -44,6 +69,7 @@ class PasswordSerializer(serializers.Serializer):
 
     def validate_password(self, value):
         validate_password(value)
+
         return value
 
 

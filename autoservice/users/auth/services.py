@@ -11,11 +11,20 @@ class AuthService:
     def login(*, phone: str, password: str) -> dict[str, str]:
         phone = PhoneNormalizer.normalize(phone)
 
-        user = authenticate(username=phone, password=password)
+        user = authenticate(
+            username=phone,
+            password=password,
+        )
+
         if user is None:
-            raise AuthenticationFailed('Invalid phone or password.')
+            raise AuthenticationFailed(
+                'Invalid phone or password.'
+            )
+
         if not user.is_active:
-            raise AuthenticationFailed('User is inactive.')
+            raise AuthenticationFailed(
+                'User is inactive.'
+            )
 
         return create_auth_tokens(user)
 
@@ -24,7 +33,9 @@ class AuthService:
         *,
         phone: str,
         password: str,
-        full_name: str = '',
+        first_name: str,
+        last_name: str,
+        patronymic: str = '',
         birthday=None,
     ) -> dict[str, str]:
         phone = PhoneNormalizer.normalize(phone)
@@ -37,11 +48,14 @@ class AuthService:
         user = User.objects.create_user(
             phone=phone,
             password=password,
-            full_name=full_name,
+            first_name=first_name,
+            last_name=last_name,
+            patronymic=patronymic,
             birthday=birthday,
         )
 
         return create_auth_tokens(user)
+
 
 class PhoneNormalizer:
 
