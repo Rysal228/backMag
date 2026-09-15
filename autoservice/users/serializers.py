@@ -74,7 +74,6 @@ class ProfileCustomUserSerializer(serializers.ModelSerializer):
 
         fields = [
             'id',
-            'username',
             'phone',
             'firstName',
             'lastName',
