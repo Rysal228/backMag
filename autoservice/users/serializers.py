@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+
 class CustomUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True,
@@ -73,6 +74,7 @@ class ProfileCustomUserSerializer(serializers.ModelSerializer):
 
         fields = [
             'id',
+            'username',
             'phone',
             'firstName',
             'lastName',
