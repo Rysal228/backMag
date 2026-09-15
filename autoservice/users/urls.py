@@ -10,19 +10,16 @@ router.register(
     basename='users',
 )
 
-router.register(
-    r'profile',
-    ProfileCustomUserViewSet,
-    basename='profile',
-)
-
-
 urlpatterns = [
+    path(
+        'profile/',
+        ProfileCustomUserViewSet.as_view({'get': 'list'}),
+        name='profile',
+    ),
     path(
         '',
         include(router.urls),
     ),
-
     path(
         'auth/',
         include('users.auth.urls'),
