@@ -1,31 +1,58 @@
-from django.core.serializers import serialize
-from rest_framework import viewsets, permissions, exceptions, status
-from rest_framework.permissions import IsAuthenticated
-
-from .serializers import CustomUserSerializer, ProfileCustomUserSerializer
+from rest_framework import viewsets, permissions, status
+from rest_framework.exceptions import ValidationError
+from .models import UserRole
 from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
 
-class CustomUserViewSet(viewsets.ModelViewSet):
-    queryset = get_user_model().objects.all()
+from .serializers import (
+    CustomUserSerializer,
+    ProfileCustomUserSerializer,
+)
+
+
+User = get_user_model()
+
+
+class CustomUserViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = User.objects.all()
     serializer_class = CustomUserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        role = self.request.query_params.get('role')
+
+        if not role:
+            return queryset
+
+        if role not in UserRole.values:
+            raise ValidationError({
+                'role': 'Invalid user role.',
+            })
+
+        return queryset.filter(role=role)
+
+
 class ProfileCustomUserViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = get_user_model().objects.all()
+    queryset = User.objects.all()
     serializer_class = ProfileCustomUserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def list(self, request):
-        profile = self.get_queryset().get(id=self.request.user.id)
-        serializer = self.get_serializer(profile)
-        return Response({'user': serializer.data})
+        serializer = self.get_serializer(request.user)
+
+        return Response(
+            {'user': serializer.data},
+            status=status.HTTP_200_OK,
+        )
+
 
 class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
         refresh_token = request.data.get('refreshToken')
