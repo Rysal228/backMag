@@ -1,11 +1,9 @@
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework import routers
 
-from .views import CarViewSet, CarBrandViewSet, CarModelViewSet
+from .views import CarBrandViewSet, CarModelViewSet, CarViewSet
 
 router = routers.DefaultRouter()
-
-router.register(r'', CarViewSet, basename='cars')
 
 router.register(
     r'brands',
@@ -17,6 +15,12 @@ router.register(
     r'models',
     CarModelViewSet,
     basename='models',
+)
+
+router.register(
+    r'',
+    CarViewSet,
+    basename='cars',
 )
 
 urlpatterns = [
