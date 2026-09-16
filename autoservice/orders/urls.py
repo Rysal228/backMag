@@ -5,7 +5,11 @@ from .views import OrderViewSet, WorkTypeViewSet, OrderStatusViewSet
 
 router = routers.DefaultRouter()
 
-router.register(r'', OrderViewSet, basename='orders')
+router.register(
+    r'order-status',
+    OrderStatusViewSet,
+    basename='orderStatus',
+)
 
 router.register(
     r'work-type',
@@ -13,11 +17,7 @@ router.register(
     basename='workType',
 )
 
-router.register(
-    r'order-status',
-    OrderStatusViewSet,
-    basename='orderStatus',
-)
+router.register(r'', OrderViewSet, basename='orders')
 
 urlpatterns = [
     path('', include(router.urls)),
