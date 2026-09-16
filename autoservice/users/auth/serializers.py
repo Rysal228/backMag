@@ -72,17 +72,8 @@ class PasswordSerializer(serializers.Serializer):
 
         return value
 
-
-class RefreshSerializer(serializers.Serializer):
-    refresh = serializers.CharField(
-        write_only=True,
-    )
-
-
 class RefreshTokenSerializer(TokenRefreshSerializer):
     def validate(self, attrs):
-        attrs['refresh'] = attrs.pop('refreshToken')
-
         data = super().validate(attrs)
 
         return {
