@@ -13,11 +13,6 @@ router.register(
 urlpatterns = [
     path(
         'profile/',
-        ProfileCustomUserViewSet.as_view({'get': 'list'}),
-        name='profile',
-    ),
-    path(
-        'profile/',
         ProfileCustomUserView.as_view(),
         name='profile',
     ),

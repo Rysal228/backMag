@@ -36,26 +36,15 @@ class CustomUserViewSet(viewsets.ReadOnlyModelViewSet):
 
         return queryset.filter(role=role)
 
-
-class ProfileCustomUserViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = User.objects.all()
-    serializer_class = ProfileCustomUserSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def list(self, request):
-        serializer = self.get_serializer(request.user)
-
-        return Response(
-            {'user': serializer.data},
-            status=status.HTTP_200_OK,
-        )
-
 class ProfileCustomUserView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         serializer = ProfileCustomUserSerializer(request.user)
-        return Response({'user': serializer.data})
+
+        return Response({
+            'user': serializer.data,
+        })
 
     def patch(self, request):
         serializer = ProfileCustomUserSerializer(
@@ -67,7 +56,9 @@ class ProfileCustomUserView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        return Response({'user': serializer.data})
+        return Response({
+            'user': serializer.data,
+        })
 
 class LogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
