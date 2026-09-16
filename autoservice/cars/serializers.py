@@ -1,3 +1,5 @@
+from datetime import date
+
 from rest_framework import serializers
 
 from cars.models import Car, CarBrand, CarModel
@@ -61,3 +63,13 @@ class CarSerializer(serializers.ModelSerializer):
             })
 
         return attrs
+
+    def validate_year(self, value):
+        current_year = date.today().year
+
+        if value < 1886 or value > current_year + 1:
+            raise serializers.ValidationError(
+                f'Год выпуска должен быть от 1886 до {current_year + 1}.'
+            )
+
+        return value
