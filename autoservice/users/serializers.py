@@ -63,15 +63,20 @@ class CustomUserSerializer(serializers.ModelSerializer):
 class ProfileCustomUserSerializer(serializers.ModelSerializer):
     firstName = serializers.CharField(
         source='first_name',
+        max_length=150,
     )
-
     lastName = serializers.CharField(
         source='last_name',
+        max_length=150,
+    )
+    patronymic = serializers.CharField(
+        max_length=150,
+        required=False,
+        allow_blank=True,
     )
 
     class Meta:
         model = get_user_model()
-
         fields = [
             'id',
             'phone',
@@ -79,5 +84,10 @@ class ProfileCustomUserSerializer(serializers.ModelSerializer):
             'lastName',
             'patronymic',
             'birthday',
+            'role',
+        ]
+        read_only_fields = [
+            'id',
+            'phone',
             'role',
         ]

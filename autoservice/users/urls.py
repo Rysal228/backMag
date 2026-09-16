@@ -17,6 +17,11 @@ urlpatterns = [
         name='profile',
     ),
     path(
+        'profile/',
+        ProfileCustomUserView.as_view(),
+        name='profile',
+    ),
+    path(
         '',
         include(router.urls),
     ),
