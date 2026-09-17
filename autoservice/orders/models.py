@@ -37,6 +37,7 @@ class OrderStatus(models.Model):
         default=StatusAppearance.WARNING,
     )
     is_initial = models.BooleanField(verbose_name='Начальный статус', default=False)
+    requires_payment = models.BooleanField(verbose_name='Требует оплаты', default=False)
 
     def clean(self):
         if self.is_initial and OrderStatus.objects.filter(is_initial=True).exclude(pk=self.pk).exists():
