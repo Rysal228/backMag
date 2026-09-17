@@ -28,6 +28,7 @@ class OrderStatusSerializer(serializers.ModelSerializer):
 class OrderSerializer(serializers.ModelSerializer):
     orderNumber = serializers.CharField(source='order_number', read_only=True)
     carName = serializers.SerializerMethodField()
+    carPlateNumber = serializers.CharField(source='car.plate_number', read_only=True, allow_null=True)
     workTypeName = serializers.CharField(source='work_type.name', read_only=True)
     statusName = serializers.CharField(source='status.name', read_only=True)
     appointmentAt = serializers.DateTimeField(source='appointment_at')
@@ -40,6 +41,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'orderNumber',
             'car',
             'carName',
+            'carPlateNumber',
             'work_type',
             'workTypeName',
             'statusName',
@@ -52,6 +54,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'id',
             'orderNumber',
             'carName',
+            'carPlateNumber',
             'workTypeName',
             'statusName',
             'price',
