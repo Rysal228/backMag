@@ -1,4 +1,4 @@
-from datetime import date
+import re
 
 from rest_framework import serializers
 
@@ -64,14 +64,15 @@ class CarSerializer(serializers.ModelSerializer):
 
         return attrs
 
-    def validate_year(self, value):
-        current_year = date.today().year
-        min_year = 1900
-        max_year = current_year + 1
+    def validate_vin(self, value):
+        if not value:
+            return value
 
-        if value < min_year or value > max_year:
+        value = value.strip().upper()
+
+        if not re.fullmatch(r'[A-HJ-NPR-Z0-9]{17}', value):
             raise serializers.ValidationError(
-                f'Год выпуска должен быть от {min_year} до {max_year}.'
+                'VIN должен содержать 17 символов: латинские буквы и цифры, без I, O и Q.'
             )
 
         return value
