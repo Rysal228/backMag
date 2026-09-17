@@ -37,6 +37,21 @@ class OrderStatus(models.Model):
         return self.name
 
 
+class WorkStatus(models.Model):
+
+    class Meta:
+        verbose_name = 'Статус работы'
+        verbose_name_plural = 'Статусы работ'
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+    )
+
+    def __str__(self):
+        return self.name
+
+
 class Order(models.Model):
 
     class Meta:
@@ -74,6 +89,13 @@ class Order(models.Model):
     status = models.ForeignKey(
         OrderStatus,
         on_delete=models.PROTECT,
+    )
+
+    work_status = models.ForeignKey(
+        WorkStatus,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
     )
 
     appointment_at = models.DateTimeField(
