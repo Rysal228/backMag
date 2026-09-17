@@ -2,7 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from cars.models import Car
-from orders.models import Order, OrderStatus, WorkType
+from orders.models import Order, OrderStatus, WorkStatus, WorkType
 
 
 class WorkTypeSerializer(serializers.ModelSerializer):
@@ -25,12 +25,23 @@ class OrderStatusSerializer(serializers.ModelSerializer):
         )
 
 
+class WorkStatusSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = WorkStatus
+        fields = (
+            'id',
+            'name',
+        )
+
+
 class OrderSerializer(serializers.ModelSerializer):
     orderNumber = serializers.CharField(source='order_number', read_only=True)
     carName = serializers.SerializerMethodField()
     carPlateNumber = serializers.CharField(source='car.plate_number', read_only=True, allow_null=True)
     workTypeName = serializers.CharField(source='work_type.name', read_only=True)
     statusName = serializers.CharField(source='status.name', read_only=True)
+    workStatusName = serializers.CharField(source='work_status.name', read_only=True, allow_null=True)
     appointmentAt = serializers.DateTimeField(source='appointment_at')
     createdAt = serializers.DateTimeField(source='created_at', read_only=True)
 
@@ -45,6 +56,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'work_type',
             'workTypeName',
             'statusName',
+            'workStatusName',
             'appointmentAt',
             'description',
             'price',
@@ -57,6 +69,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'carPlateNumber',
             'workTypeName',
             'statusName',
+            'workStatusName',
             'price',
             'createdAt',
         )
