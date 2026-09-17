@@ -12,9 +12,11 @@ class WorkTypeSerializer(serializers.ModelSerializer):
 
 
 class OrderStatusSerializer(serializers.ModelSerializer):
+    requiresPayment = serializers.BooleanField(source='requires_payment')
+
     class Meta:
         model = OrderStatus
-        fields = ('id', 'name', 'appearance', 'is_initial')
+        fields = ('id', 'name', 'appearance', 'is_initial', 'requiresPayment')
         read_only_fields = ('id',)
 
 
@@ -26,9 +28,11 @@ class WorkStatusSerializer(serializers.ModelSerializer):
 
 
 class OrderStatusInlineSerializer(serializers.ModelSerializer):
+    requiresPayment = serializers.BooleanField(source='requires_payment', read_only=True)
+
     class Meta:
         model = OrderStatus
-        fields = ('id', 'name', 'appearance')
+        fields = ('id', 'name', 'appearance', 'requiresPayment')
 
 
 class WorkStatusInlineSerializer(serializers.ModelSerializer):
