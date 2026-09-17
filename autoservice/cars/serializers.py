@@ -66,10 +66,12 @@ class CarSerializer(serializers.ModelSerializer):
 
     def validate_year(self, value):
         current_year = date.today().year
+        min_year = 1900
+        max_year = current_year + 1
 
-        if value < 1886 or value > current_year + 1:
+        if value < min_year or value > max_year:
             raise serializers.ValidationError(
-                f'Год выпуска должен быть от 1886 до {current_year + 1}.'
+                f'Год выпуска должен быть от {min_year} до {max_year}.'
             )
 
         return value
