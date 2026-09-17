@@ -76,6 +76,11 @@ class Order(models.Model):
         on_delete=models.PROTECT,
     )
 
+    appointment_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
     description = models.TextField(
         blank=True,
     )
