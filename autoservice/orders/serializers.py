@@ -46,6 +46,7 @@ class OrderSerializer(serializers.ModelSerializer):
     carName = serializers.SerializerMethodField()
     carPlateNumber = serializers.CharField(source='car.plate_number', read_only=True, allow_null=True)
     workType = serializers.PrimaryKeyRelatedField(source='work_type', queryset=WorkType.objects.all())
+    workTypeName = serializers.CharField(source='work_type.name', read_only=True)
     status = OrderStatusInlineSerializer(read_only=True)
     workStatus = WorkStatusInlineSerializer(source='work_status', read_only=True, allow_null=True)
     appointmentAt = serializers.DateTimeField(source='appointment_at')
@@ -54,8 +55,8 @@ class OrderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Order
-        fields = ('id', 'orderNumber', 'car', 'carName', 'carPlateNumber', 'workType', 'status', 'workStatus', 'appointmentAt', 'description', 'price', 'createdAt')
-        read_only_fields = ('id', 'orderNumber', 'carName', 'carPlateNumber', 'status', 'workStatus', 'price', 'createdAt')
+        fields = ('id', 'orderNumber', 'car', 'carName', 'carPlateNumber', 'workType', 'workTypeName', 'status', 'workStatus', 'appointmentAt', 'description', 'price', 'createdAt')
+        read_only_fields = ('id', 'orderNumber', 'carName', 'carPlateNumber', 'workTypeName', 'status', 'workStatus', 'price', 'createdAt')
 
     def get_carName(self, obj):
         return f'{obj.car.brand.name} {obj.car.model.name}'
