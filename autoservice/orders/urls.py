@@ -1,7 +1,7 @@
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework import routers
 
-from .views import OrderViewSet, WorkTypeViewSet, OrderStatusViewSet
+from .views import OrderStatusViewSet, OrderViewSet, WorkStatusViewSet, WorkTypeViewSet
 
 router = routers.DefaultRouter()
 
@@ -9,6 +9,12 @@ router.register(
     r'order-status',
     OrderStatusViewSet,
     basename='orderStatus',
+)
+
+router.register(
+    r'work-status',
+    WorkStatusViewSet,
+    basename='workStatus',
 )
 
 router.register(
