@@ -11,8 +11,8 @@ class WorkTypeAdmin(admin.ModelAdmin):
 
 @admin.register(OrderStatus)
 class OrderStatusAdmin(admin.ModelAdmin):
-    list_display = ('name', 'appearance', 'is_initial')
-    list_filter = ('appearance', 'is_initial')
+    list_display = ('name', 'appearance', 'is_initial', 'requires_payment')
+    list_filter = ('appearance', 'is_initial', 'requires_payment')
     search_fields = ('name',)
 
 
