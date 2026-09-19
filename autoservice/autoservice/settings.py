@@ -160,6 +160,8 @@ CORS_ALLOWED_ORIGINS = [
 CSRF_TRUSTED_ORIGINS = [
     "http://188.137.182.125",
     "https://servicecar-d008b.web.app",
+    'http://127.0.0.1',
+    "http://localhost:4200",
 ]
 
 SIMPLE_JWT = {
