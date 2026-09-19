@@ -31,6 +31,8 @@ ALLOWED_HOSTS = [
     "188.137.182.125",
     "localhost",
     "127.0.0.1",
+    "cherser-car.site",
+    "www.cherser-car.site",
 ]
 
 
@@ -154,12 +156,14 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:4200",
     "http://127.0.0.1:4200",
     "http://188.137.182.125",
-    "https://servicecar-d008b.web.app",
+    "cherser-car.site",
+    "www.cherser-car.site",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
     "http://188.137.182.125",
-    "https://servicecar-d008b.web.app",
+    "cherser-car.site",
+    "www.cherser-car.site",
     'http://127.0.0.1',
     "http://localhost:4200",
 ]
