@@ -157,9 +157,11 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:4200",
     "http://127.0.0.1:4200",
     "http://188.137.182.125",
-    "cherser-car.site",
-    "www.cherser-car.site",
+    "https://cherser-car.site",
+    "https://www.cherser-car.site",
 ]
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 CSRF_TRUSTED_ORIGINS = [
     "http://188.137.182.125",
