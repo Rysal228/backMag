@@ -27,7 +27,11 @@ SECRET_KEY = 'django-insecure-&#aisvpyqmt6#704owjvwght0o3ifg-d^s1w+_(zj^d48wb0-c
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "188.137.182.125",
+    "localhost",
+    "127.0.0.1",
+]
 
 
 # Application definition
@@ -147,8 +151,15 @@ REST_FRAMEWORK = {
 }
 
 CORS_ALLOWED_ORIGINS = [
-    'http://127.0.0.1',
-    "http://localhost:4200"
+    "http://localhost:4200",
+    "http://127.0.0.1:4200",
+    "http://188.137.182.125",
+    "https://servicecar-d008b.web.app",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://188.137.182.125",
+    "https://servicecar-d008b.web.app",
 ]
 
 SIMPLE_JWT = {
