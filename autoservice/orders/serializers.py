@@ -2,7 +2,15 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from cars.models import Car
-from orders.models import Order, OrderStatus, WorkStatus, WorkType
+from orders.models import (
+    AppointmentSettings,
+    Order,
+    OrderStatus,
+    ScheduleException,
+    WeekdaySchedule,
+    WorkStatus,
+    WorkType,
+)
 
 
 class WorkTypeSerializer(serializers.ModelSerializer):
@@ -39,6 +47,40 @@ class WorkStatusInlineSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkStatus
         fields = ('id', 'name', 'appearance')
+
+
+class AppointmentSettingsSerializer(serializers.ModelSerializer):
+    appointmentDuration = serializers.IntegerField(source='appointment_duration')
+    slotInterval = serializers.IntegerField(source='slot_interval')
+
+    class Meta:
+        model = AppointmentSettings
+        fields = ('appointmentDuration', 'slotInterval')
+
+
+class WeekdayScheduleSerializer(serializers.ModelSerializer):
+    weekdayName = serializers.CharField(source='get_weekday_display', read_only=True)
+    startTime = serializers.TimeField(source='start_time', format='%H:%M', allow_null=True)
+    endTime = serializers.TimeField(source='end_time', format='%H:%M', allow_null=True)
+
+    class Meta:
+        model = WeekdaySchedule
+        fields = ('weekday', 'weekdayName', 'is_working', 'startTime', 'endTime')
+
+
+class ScheduleExceptionSerializer(serializers.ModelSerializer):
+    startTime = serializers.TimeField(source='start_time', format='%H:%M', allow_null=True)
+    endTime = serializers.TimeField(source='end_time', format='%H:%M', allow_null=True)
+
+    class Meta:
+        model = ScheduleException
+        fields = ('date', 'is_working', 'startTime', 'endTime')
+
+
+class AppointmentScheduleSerializer(serializers.Serializer):
+    settings = AppointmentSettingsSerializer()
+    weekdays = WeekdayScheduleSerializer(many=True)
+    exceptions = ScheduleExceptionSerializer(many=True)
 
 
 class OrderSerializer(serializers.ModelSerializer):
