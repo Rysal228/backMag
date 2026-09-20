@@ -140,29 +140,24 @@ class WeekdaySchedule(models.Model):
         return self.get_weekday_display()
 
 
-class ScheduleException(models.Model):
+class ScheduleBlock(models.Model):
     class Meta:
-        verbose_name = 'Исключение расписания'
-        verbose_name_plural = 'Исключения расписания'
-        ordering = ('date',)
+        verbose_name = 'Недоступный интервал'
+        verbose_name_plural = 'Недоступные интервалы'
+        ordering = ('date', 'start_time')
 
-    date = models.DateField(verbose_name='Дата', unique=True)
-    is_working = models.BooleanField(verbose_name='Рабочий день', default=False)
-    start_time = models.TimeField(verbose_name='Начало рабочего времени', null=True, blank=True)
-    end_time = models.TimeField(verbose_name='Конец рабочего времени', null=True, blank=True)
+    date = models.DateField(verbose_name='Дата')
+    start_time = models.TimeField(verbose_name='Начало недоступного интервала')
+    end_time = models.TimeField(verbose_name='Конец недоступного интервала')
 
     def clean(self):
-        if self.is_working and (self.start_time is None or self.end_time is None):
-            raise ValidationError('Для рабочего исключения необходимо указать начало и конец рабочего времени.')
-
-        if not self.is_working and (self.start_time is not None or self.end_time is not None):
-            raise ValidationError('Для выходного исключения рабочее время указывать не нужно.')
-
-        if self.is_working and self.start_time >= self.end_time:
-            raise ValidationError({'end_time': 'Конец рабочего времени должен быть позже его начала.'})
+        if self.start_time >= self.end_time:
+            raise ValidationError({
+                'end_time': 'Конец недоступного интервала должен быть позже его начала.'
+            })
 
     def __str__(self):
-        return self.date.strftime('%d.%m.%Y')
+        return f'{self.date:%d.%m.%Y} {self.start_time:%H:%M}–{self.end_time:%H:%M}'
 
 
 class Order(models.Model):
