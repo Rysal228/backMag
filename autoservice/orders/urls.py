@@ -1,7 +1,13 @@
 from django.urls import include, path
 from rest_framework import routers
 
-from .views import OrderStatusViewSet, OrderViewSet, WorkStatusViewSet, WorkTypeViewSet
+from .views import (
+    AppointmentScheduleView,
+    OrderStatusViewSet,
+    OrderViewSet,
+    WorkStatusViewSet,
+    WorkTypeViewSet,
+)
 
 router = routers.DefaultRouter()
 
@@ -26,5 +32,6 @@ router.register(
 router.register(r'', OrderViewSet, basename='orders')
 
 urlpatterns = [
+    path('schedule/', AppointmentScheduleView.as_view(), name='appointmentSchedule'),
     path('', include(router.urls)),
 ]
