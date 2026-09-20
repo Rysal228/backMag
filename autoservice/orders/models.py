@@ -1,6 +1,7 @@
 import uuid
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from users.models import CustomUser
@@ -62,6 +63,106 @@ class WorkStatus(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class AppointmentSettings(models.Model):
+    class Meta:
+        verbose_name = 'Настройки записи'
+        verbose_name_plural = 'Настройки записи'
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    appointment_duration = models.PositiveIntegerField(
+        verbose_name='Длительность записи, мин.',
+        default=60,
+        validators=[MinValueValidator(5), MaxValueValidator(1440)],
+    )
+    slot_interval = models.PositiveIntegerField(
+        verbose_name='Интервал начала записи, мин.',
+        default=30,
+        validators=[MinValueValidator(5), MaxValueValidator(1440)],
+    )
+
+    def clean(self):
+        if self.id != 1:
+            raise ValidationError({'id': 'Может существовать только одна запись настроек.'})
+
+        if self.slot_interval > self.appointment_duration:
+            raise ValidationError({
+                'slot_interval': 'Интервал начала записи не может быть больше длительности записи.'
+            })
+
+    def save(self, *args, **kwargs):
+        self.id = 1
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return 'Основные настройки записи'
+
+
+class WeekdaySchedule(models.Model):
+    class Weekday(models.IntegerChoices):
+        MONDAY = 0, 'Понедельник'
+        TUESDAY = 1, 'Вторник'
+        WEDNESDAY = 2, 'Среда'
+        THURSDAY = 3, 'Четверг'
+        FRIDAY = 4, 'Пятница'
+        SATURDAY = 5, 'Суббота'
+        SUNDAY = 6, 'Воскресенье'
+
+    class Meta:
+        verbose_name = 'Расписание по дню недели'
+        verbose_name_plural = 'Расписание по дням недели'
+        ordering = ('weekday',)
+        constraints = [
+            models.UniqueConstraint(fields=('weekday',), name='unique_weekday_schedule'),
+        ]
+
+    weekday = models.PositiveSmallIntegerField(
+        verbose_name='День недели',
+        choices=Weekday.choices,
+    )
+    is_working = models.BooleanField(verbose_name='Рабочий день', default=True)
+    start_time = models.TimeField(verbose_name='Начало рабочего дня', null=True, blank=True)
+    end_time = models.TimeField(verbose_name='Конец рабочего дня', null=True, blank=True)
+
+    def clean(self):
+        if self.is_working and (self.start_time is None or self.end_time is None):
+            raise ValidationError('Для рабочего дня необходимо указать начало и конец рабочего времени.')
+
+        if not self.is_working and (self.start_time is not None or self.end_time is not None):
+            raise ValidationError('Для выходного дня рабочее время указывать не нужно.')
+
+        if self.is_working and self.start_time >= self.end_time:
+            raise ValidationError({'end_time': 'Конец рабочего дня должен быть позже его начала.'})
+
+    def __str__(self):
+        return self.get_weekday_display()
+
+
+class ScheduleException(models.Model):
+    class Meta:
+        verbose_name = 'Исключение расписания'
+        verbose_name_plural = 'Исключения расписания'
+        ordering = ('date',)
+
+    date = models.DateField(verbose_name='Дата', unique=True)
+    is_working = models.BooleanField(verbose_name='Рабочий день', default=False)
+    start_time = models.TimeField(verbose_name='Начало рабочего времени', null=True, blank=True)
+    end_time = models.TimeField(verbose_name='Конец рабочего времени', null=True, blank=True)
+
+    def clean(self):
+        if self.is_working and (self.start_time is None or self.end_time is None):
+            raise ValidationError('Для рабочего исключения необходимо указать начало и конец рабочего времени.')
+
+        if not self.is_working and (self.start_time is not None or self.end_time is not None):
+            raise ValidationError('Для выходного исключения рабочее время указывать не нужно.')
+
+        if self.is_working and self.start_time >= self.end_time:
+            raise ValidationError({'end_time': 'Конец рабочего времени должен быть позже его начала.'})
+
+    def __str__(self):
+        return self.date.strftime('%d.%m.%Y')
 
 
 class Order(models.Model):
