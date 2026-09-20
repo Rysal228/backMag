@@ -2,7 +2,7 @@ from rest_framework import permissions, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from orders.models import AppointmentSettings, Order, ScheduleException, WeekdaySchedule, OrderStatus, WorkStatus, WorkType
+from orders.models import AppointmentSettings, Order, ScheduleBlock, WeekdaySchedule, OrderStatus, WorkStatus, WorkType
 from orders.serializers import (
     AppointmentScheduleSerializer,
     OrderSerializer,
@@ -41,7 +41,7 @@ class AppointmentScheduleView(APIView):
         data = {
             'settings': settings,
             'weekdays': WeekdaySchedule.objects.all(),
-            'exceptions': ScheduleException.objects.all(),
+            'blocks': ScheduleBlock.objects.all(),
         }
 
         return Response(AppointmentScheduleSerializer(data).data)
