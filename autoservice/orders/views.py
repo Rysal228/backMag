@@ -1,7 +1,15 @@
 from rest_framework import permissions, viewsets
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from orders.models import Order, OrderStatus, WorkStatus, WorkType
-from orders.serializers import OrderSerializer, OrderStatusSerializer, WorkStatusSerializer, WorkTypeSerializer
+from orders.models import AppointmentSettings, Order, ScheduleException, WeekdaySchedule, OrderStatus, WorkStatus, WorkType
+from orders.serializers import (
+    AppointmentScheduleSerializer,
+    OrderSerializer,
+    OrderStatusSerializer,
+    WorkStatusSerializer,
+    WorkTypeSerializer,
+)
 
 
 class WorkTypeViewSet(viewsets.ReadOnlyModelViewSet):
@@ -20,6 +28,23 @@ class WorkStatusViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = WorkStatus.objects.all().order_by('id')
     serializer_class = WorkStatusSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+
+class AppointmentScheduleView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        settings = AppointmentSettings.objects.first()
+        if settings is None:
+            settings = AppointmentSettings.objects.create()
+
+        data = {
+            'settings': settings,
+            'weekdays': WeekdaySchedule.objects.all(),
+            'exceptions': ScheduleException.objects.all(),
+        }
+
+        return Response(AppointmentScheduleSerializer(data).data)
 
 
 class OrderViewSet(viewsets.ModelViewSet):
