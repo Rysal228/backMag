@@ -4,7 +4,7 @@ from orders.models import (
     AppointmentSettings,
     Order,
     OrderStatus,
-    ScheduleException,
+    ScheduleBlock,
     WeekdaySchedule,
     WorkStatus,
     WorkType,
@@ -49,11 +49,11 @@ class WeekdayScheduleAdmin(admin.ModelAdmin):
     ordering = ('weekday',)
 
 
-@admin.register(ScheduleException)
-class ScheduleExceptionAdmin(admin.ModelAdmin):
-    list_display = ('date', 'is_working', 'start_time', 'end_time')
-    list_filter = ('is_working',)
-    ordering = ('date',)
+@admin.register(ScheduleBlock)
+class ScheduleBlockAdmin(admin.ModelAdmin):
+    list_display = ('date', 'start_time', 'end_time')
+    list_filter = ('date',)
+    ordering = ('date', 'start_time')
 
 
 @admin.register(Order)
