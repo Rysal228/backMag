@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from orders.models import Order, OrderStatus, WorkStatus, WorkType
+from orders.models import (
+    AppointmentSettings,
+    Order,
+    OrderStatus,
+    ScheduleException,
+    WeekdaySchedule,
+    WorkStatus,
+    WorkType,
+)
 
 
 @admin.register(WorkType)
@@ -21,6 +29,31 @@ class WorkStatusAdmin(admin.ModelAdmin):
     list_display = ('name', 'appearance')
     list_filter = ('appearance',)
     search_fields = ('name',)
+
+
+@admin.register(AppointmentSettings)
+class AppointmentSettingsAdmin(admin.ModelAdmin):
+    list_display = ('appointment_duration', 'slot_interval')
+
+    def has_add_permission(self, request):
+        return not AppointmentSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(WeekdaySchedule)
+class WeekdayScheduleAdmin(admin.ModelAdmin):
+    list_display = ('weekday', 'is_working', 'start_time', 'end_time')
+    list_filter = ('is_working',)
+    ordering = ('weekday',)
+
+
+@admin.register(ScheduleException)
+class ScheduleExceptionAdmin(admin.ModelAdmin):
+    list_display = ('date', 'is_working', 'start_time', 'end_time')
+    list_filter = ('is_working',)
+    ordering = ('date',)
 
 
 @admin.register(Order)
