@@ -6,7 +6,7 @@ from orders.models import (
     AppointmentSettings,
     Order,
     OrderStatus,
-    ScheduleException,
+    ScheduleBlock,
     WeekdaySchedule,
     WorkStatus,
     WorkType,
@@ -68,19 +68,19 @@ class WeekdayScheduleSerializer(serializers.ModelSerializer):
         fields = ('weekday', 'weekdayName', 'is_working', 'startTime', 'endTime')
 
 
-class ScheduleExceptionSerializer(serializers.ModelSerializer):
+class ScheduleBlockSerializer(serializers.ModelSerializer):
     startTime = serializers.TimeField(source='start_time', format='%H:%M', allow_null=True)
     endTime = serializers.TimeField(source='end_time', format='%H:%M', allow_null=True)
 
     class Meta:
-        model = ScheduleException
-        fields = ('date', 'is_working', 'startTime', 'endTime')
+        model = ScheduleBlock
+        fields = ('date', 'startTime', 'endTime')
 
 
 class AppointmentScheduleSerializer(serializers.Serializer):
     settings = AppointmentSettingsSerializer()
     weekdays = WeekdayScheduleSerializer(many=True)
-    exceptions = ScheduleExceptionSerializer(many=True)
+    blocks = ScheduleBlockSerializer(many=True)
 
 
 class OrderSerializer(serializers.ModelSerializer):
