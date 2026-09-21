@@ -2,6 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from cars.models import Car
+from orders.services.appointment_availability import AppointmentAvailabilityService
 from orders.models import (
     AppointmentSettings,
     Order,
@@ -83,6 +84,25 @@ class AppointmentScheduleSerializer(serializers.Serializer):
     blocks = ScheduleBlockSerializer(many=True)
 
 
+class TimeIntervalSerializer(serializers.Serializer):
+    from_time = serializers.TimeField(source='from', format='%H:%M')
+    to_time = serializers.TimeField(source='to', format='%H:%M')
+
+
+class WorkingHoursSerializer(serializers.Serializer):
+    from_time = serializers.TimeField(source='from', format='%H:%M')
+    to_time = serializers.TimeField(source='to', format='%H:%M')
+
+
+class AppointmentAvailabilitySerializer(serializers.Serializer):
+    date = serializers.DateField()
+    workingHours = WorkingHoursSerializer(source='working_hours', allow_null=True)
+    appointmentDuration = serializers.IntegerField(source='appointment_duration')
+    slotInterval = serializers.IntegerField(source='slot_interval')
+    busySlots = TimeIntervalSerializer(source='busy_slots', many=True)
+    blockedSlots = TimeIntervalSerializer(source='blocked_slots', many=True)
+
+
 class OrderSerializer(serializers.ModelSerializer):
     orderNumber = serializers.CharField(source='order_number', read_only=True)
     carName = serializers.SerializerMethodField()
@@ -110,8 +130,8 @@ class OrderSerializer(serializers.ModelSerializer):
         return value
 
     def validate_appointmentAt(self, value):
-        if value <= timezone.now():
-            raise serializers.ValidationError('Дата и время записи должны быть в будущем.')
+        if not AppointmentAvailabilityService.is_slot_available(value):
+            raise serializers.ValidationError('Выбранное время недоступно для записи.')
         return value
 
     def create(self, validated_data):
