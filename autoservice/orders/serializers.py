@@ -99,6 +99,8 @@ class AppointmentAvailabilitySerializer(serializers.Serializer):
     workingHours = WorkingHoursSerializer(source='working_hours', allow_null=True)
     appointmentDuration = serializers.IntegerField(source='appointment_duration')
     slotInterval = serializers.IntegerField(source='slot_interval')
+    firstSlot = serializers.TimeField(source='first_slot', format='%H:%M', allow_null=True)
+    lastSlot = serializers.TimeField(source='last_slot', format='%H:%M', allow_null=True)
     busySlots = TimeIntervalSerializer(source='busy_slots', many=True)
     blockedSlots = TimeIntervalSerializer(source='blocked_slots', many=True)
 
