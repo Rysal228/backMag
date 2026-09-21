@@ -160,6 +160,35 @@ class ScheduleBlock(models.Model):
         return f'{self.date:%d.%m.%Y} {self.start_time:%H:%M}–{self.end_time:%H:%M}'
 
 
+class BusySlot(models.Model):
+    class Meta:
+        verbose_name = 'Занятое время'
+        verbose_name_plural = 'Занятое время'
+        ordering = ('date', 'start_time')
+
+    date = models.DateField(verbose_name='Дата')
+    start_time = models.TimeField(verbose_name='Начало занятого времени')
+    end_time = models.TimeField(verbose_name='Конец занятого времени')
+    order = models.OneToOneField(
+        'Order',
+        on_delete=models.CASCADE,
+        related_name='busy_slot',
+        null=True,
+        blank=True,
+        verbose_name='Заказ',
+    )
+
+    def clean(self):
+        if self.start_time >= self.end_time:
+            raise ValidationError({
+                'end_time': 'Конец занятого интервала должен быть позже начала.'
+            })
+
+    def __str__(self):
+        order = f' — заказ № {self.order.order_number}' if self.order_id else ''
+        return f'{self.date:%d.%m.%Y} {self.start_time:%H:%M}–{self.end_time:%H:%M}{order}'
+
+
 class Order(models.Model):
     class Meta:
         verbose_name = 'Заказ'
