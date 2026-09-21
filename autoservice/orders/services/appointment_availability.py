@@ -145,12 +145,11 @@ class AppointmentAvailabilityService:
         local_datetime = timezone.localtime(order.appointment_at)
         end_datetime = local_datetime + timedelta(minutes=settings.appointment_duration)
 
-        busy_slot, _ = BusySlot.objects.update_or_create(
-            order=order,
-            defaults={
-                'date': local_datetime.date(),
-                'start_time': local_datetime.time().replace(second=0, microsecond=0),
-                'end_time': end_datetime.time().replace(second=0, microsecond=0),
-            },
-        )
+        busy_slot, _ = BusySlot.objects.get_or_create(order=order)
+        busy_slot.date = local_datetime.date()
+        busy_slot.start_time = local_datetime.time().replace(second=0, microsecond=0)
+        busy_slot.end_time = end_datetime.time().replace(second=0, microsecond=0)
+        busy_slot.full_clean()
+        busy_slot.save()
+
         return busy_slot
