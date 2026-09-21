@@ -1,4 +1,3 @@
-from django.utils import timezone
 from rest_framework import serializers
 
 from cars.models import Car
@@ -102,11 +101,11 @@ class WorkingHoursSerializer(serializers.Serializer):
 
 class AppointmentAvailabilitySerializer(serializers.Serializer):
     date = serializers.DateField()
+    dayType = serializers.CharField(source='day_type')
     workingHours = WorkingHoursSerializer(source='working_hours', allow_null=True)
     appointmentDuration = serializers.IntegerField(source='appointment_duration')
     slotInterval = serializers.IntegerField(source='slot_interval')
-    firstSlot = serializers.TimeField(source='first_slot', format='%H:%M', allow_null=True)
-    lastSlot = serializers.TimeField(source='last_slot', format='%H:%M', allow_null=True)
+    availableSlots = serializers.ListField(child=serializers.CharField(), source='available_slots')
     busySlots = TimeIntervalSerializer(source='busy_slots', many=True)
     blockedSlots = TimeIntervalSerializer(source='blocked_slots', many=True)
 
@@ -138,7 +137,10 @@ class OrderSerializer(serializers.ModelSerializer):
         return value
 
     def validate_appointmentAt(self, value):
-        if not AppointmentAvailabilityService.is_slot_available(value):
+        if not AppointmentAvailabilityService.is_slot_available(
+            value,
+            exclude_order_id=self.instance.id if self.instance else None,
+        ):
             raise serializers.ValidationError('Выбранное время недоступно для записи.')
         return value
 
@@ -149,7 +151,23 @@ class OrderSerializer(serializers.ModelSerializer):
         if status is None:
             raise serializers.ValidationError({'status': 'Начальный статус заказа не настроен в системе.'})
 
-        return Order.objects.create(order_number=self._generate_order_number(), customer=request.user, status=status, **validated_data)
+        order = Order.objects.create(
+            order_number=self._generate_order_number(),
+            customer=request.user,
+            status=status,
+            **validated_data,
+        )
+        AppointmentAvailabilityService.sync_order_busy_slot(order)
+        return order
+
+    def update(self, instance, validated_data):
+        appointment_changed = 'appointment_at' in validated_data
+        order = super().update(instance, validated_data)
+
+        if appointment_changed:
+            AppointmentAvailabilityService.sync_order_busy_slot(order)
+
+        return order
 
     @staticmethod
     def _generate_order_number():
