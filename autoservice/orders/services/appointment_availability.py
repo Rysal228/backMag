@@ -2,110 +2,89 @@ from datetime import date, datetime, time, timedelta
 
 from django.utils import timezone
 
-from orders.models import AppointmentSettings, Order, ScheduleBlock, WeekdaySchedule
+from orders.models import AppointmentSettings, BusySlot, Order, ScheduleBlock, WeekdaySchedule
 
 
 class AppointmentAvailabilityService:
     @staticmethod
-    def get_availability(target_date: date) -> dict:
+    def _get_settings():
         settings = AppointmentSettings.objects.first()
+        return settings or AppointmentSettings.objects.create()
 
-        if settings is None:
-            settings = AppointmentSettings.objects.create()
-
+    @classmethod
+    def get_availability(cls, target_date: date) -> dict:
+        settings = cls._get_settings()
         schedule = WeekdaySchedule.objects.filter(weekday=target_date.weekday()).first()
 
         if schedule is None or not schedule.is_working:
             return {
                 'date': target_date,
+                'day_type': 'nonWorking',
                 'working_hours': None,
                 'appointment_duration': settings.appointment_duration,
                 'slot_interval': settings.slot_interval,
-                'first_slot': None,
-                'last_slot': None,
+                'available_slots': [],
                 'busy_slots': [],
                 'blocked_slots': [],
             }
 
         duration = timedelta(minutes=settings.appointment_duration)
-        last_slot_minutes = (
-            schedule.end_time.hour * 60
-            + schedule.end_time.minute
-            - settings.appointment_duration
-        )
-        first_slot_minutes = schedule.start_time.hour * 60 + schedule.start_time.minute
         current_local = timezone.localtime(timezone.now())
-
-        if target_date == current_local.date():
-            current_minutes = current_local.hour * 60 + current_local.minute
-            current_seconds = current_local.second
-            start_minutes = first_slot_minutes
-
-            if current_minutes > first_slot_minutes or current_seconds:
-                elapsed_seconds = (current_minutes - first_slot_minutes) * 60 + current_seconds
-                interval_seconds = settings.slot_interval * 60
-                intervals = max(0, (elapsed_seconds + interval_seconds - 1) // interval_seconds)
-                start_minutes += intervals * settings.slot_interval
-
-            first_slot = (
-                time(hour=start_minutes // 60, minute=start_minutes % 60)
-                if start_minutes <= last_slot_minutes
-                else None
-            )
-        else:
-            first_slot = schedule.start_time if first_slot_minutes <= last_slot_minutes else None
-
-        last_slot = (
-            time(hour=last_slot_minutes // 60, minute=last_slot_minutes % 60)
-            if first_slot is not None
-            else None
-        )
+        start_minutes = schedule.start_time.hour * 60 + schedule.start_time.minute
+        end_minutes = schedule.end_time.hour * 60 + schedule.end_time.minute
+        last_slot_minutes = end_minutes - settings.appointment_duration
 
         blocks = ScheduleBlock.objects.filter(date=target_date).order_by('start_time')
+        busy_slots = BusySlot.objects.filter(date=target_date).order_by('start_time')
 
-        busy_orders = (
-            Order.objects
-            .filter(appointment_at__date=target_date)
-            .exclude(appointment_at__isnull=True)
-            .order_by('appointment_at')
-        )
+        available_slots = []
+        for start_minutes in range(start_minutes, last_slot_minutes + 1, settings.slot_interval):
+            slot_start = time(hour=start_minutes // 60, minute=start_minutes % 60)
+            slot_end_minutes = start_minutes + settings.appointment_duration
+            slot_end = time(hour=slot_end_minutes // 60, minute=slot_end_minutes % 60)
+            slot_datetime = timezone.make_aware(
+                datetime.combine(target_date, slot_start),
+                timezone.get_current_timezone(),
+            )
+
+            if slot_datetime <= current_local:
+                continue
+
+            if any(cls._overlaps(slot_start, slot_end, block.start_time, block.end_time) for block in blocks):
+                continue
+
+            if any(cls._overlaps(slot_start, slot_end, busy.start_time, busy.end_time) for busy in busy_slots):
+                continue
+
+            available_slots.append(slot_start.strftime('%H:%M'))
 
         return {
             'date': target_date,
+            'day_type': 'working',
             'working_hours': {
                 'from': schedule.start_time,
                 'to': schedule.end_time,
             },
             'appointment_duration': settings.appointment_duration,
             'slot_interval': settings.slot_interval,
-            'first_slot': first_slot,
-            'last_slot': last_slot,
+            'available_slots': available_slots,
             'busy_slots': [
-                {
-                    'from': appointment.appointment_at.astimezone(timezone.get_current_timezone()).time(),
-                    'to': (
-                        appointment.appointment_at
-                        + duration
-                    ).astimezone(timezone.get_current_timezone()).time(),
-                }
-                for appointment in busy_orders
+                {'from': busy.start_time, 'to': busy.end_time}
+                for busy in busy_slots
             ],
             'blocked_slots': [
-                {
-                    'from': block.start_time,
-                    'to': block.end_time,
-                }
+                {'from': block.start_time, 'to': block.end_time}
                 for block in blocks
             ],
         }
 
     @staticmethod
-    def is_slot_available(appointment_at: datetime) -> bool:
-        settings = AppointmentSettings.objects.first()
+    def _overlaps(start: time, end: time, other_start: time, other_end: time) -> bool:
+        return start < other_end and end > other_start
 
-        if settings is None:
-            settings = AppointmentSettings.objects.create()
-
+    @classmethod
+    def is_slot_available(cls, appointment_at: datetime, exclude_order_id=None) -> bool:
+        settings = cls._get_settings()
         local_datetime = timezone.localtime(appointment_at)
         target_date = local_datetime.date()
         schedule = WeekdaySchedule.objects.filter(weekday=target_date.weekday()).first()
@@ -115,7 +94,6 @@ class AppointmentAvailabilityService:
 
         duration = timedelta(minutes=settings.appointment_duration)
         appointment_end = local_datetime + duration
-
         schedule_start = timezone.make_aware(
             datetime.combine(target_date, schedule.start_time),
             timezone.get_current_timezone(),
@@ -132,7 +110,7 @@ class AppointmentAvailabilityService:
         if local_datetime.second or local_datetime.microsecond or elapsed_minutes % settings.slot_interval:
             return False
 
-        if local_datetime <= timezone.now():
+        if local_datetime <= timezone.localtime(timezone.now()):
             return False
 
         for block in ScheduleBlock.objects.filter(date=target_date):
@@ -144,19 +122,35 @@ class AppointmentAvailabilityService:
                 datetime.combine(target_date, block.end_time),
                 timezone.get_current_timezone(),
             )
-
             if local_datetime < block_end and appointment_end > block_start:
                 return False
 
-        for order in (
-            Order.objects
-            .filter(appointment_at__date=target_date)
-            .exclude(appointment_at__isnull=True)
-        ):
-            order_start = timezone.localtime(order.appointment_at)
-            order_end = order_start + duration
+        busy_query = BusySlot.objects.filter(date=target_date)
+        if exclude_order_id is not None:
+            busy_query = busy_query.exclude(order_id=exclude_order_id)
 
-            if local_datetime < order_end and appointment_end > order_start:
+        for busy in busy_query:
+            if cls._overlaps(local_datetime.time(), appointment_end.time(), busy.start_time, busy.end_time):
                 return False
 
         return True
+
+    @classmethod
+    def sync_order_busy_slot(cls, order: Order):
+        if order.appointment_at is None:
+            BusySlot.objects.filter(order=order).delete()
+            return None
+
+        settings = cls._get_settings()
+        local_datetime = timezone.localtime(order.appointment_at)
+        end_datetime = local_datetime + timedelta(minutes=settings.appointment_duration)
+
+        busy_slot, _ = BusySlot.objects.update_or_create(
+            order=order,
+            defaults={
+                'date': local_datetime.date(),
+                'start_time': local_datetime.time().replace(second=0, microsecond=0),
+                'end_time': end_datetime.time().replace(second=0, microsecond=0),
+            },
+        )
+        return busy_slot
