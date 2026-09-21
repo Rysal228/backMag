@@ -1,5 +1,32 @@
+from datetime import timedelta
+
 from django.db import migrations, models
 import django.db.models.deletion
+from django.utils import timezone
+
+
+def create_busy_slots(apps, schema_editor):
+    Order = apps.get_model('orders', 'Order')
+    BusySlot = apps.get_model('orders', 'BusySlot')
+    AppointmentSettings = apps.get_model('orders', 'AppointmentSettings')
+
+    settings = AppointmentSettings.objects.first()
+    if settings is None:
+        return
+
+    duration = timedelta(minutes=settings.appointment_duration)
+
+    for order in Order.objects.exclude(appointment_at__isnull=True):
+        appointment = timezone.localtime(order.appointment_at)
+        end = appointment + duration
+        BusySlot.objects.get_or_create(
+            order=order,
+            defaults={
+                'date': appointment.date(),
+                'start_time': appointment.time().replace(second=0, microsecond=0),
+                'end_time': end.time().replace(second=0, microsecond=0),
+            },
+        )
 
 
 class Migration(migrations.Migration):
@@ -30,4 +57,5 @@ class Migration(migrations.Migration):
                 'ordering': ('date', 'start_time'),
             },
         ),
+        migrations.RunPython(create_busy_slots, migrations.RunPython.noop),
     ]
