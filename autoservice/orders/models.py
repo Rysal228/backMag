@@ -3,6 +3,7 @@ import uuid
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 from users.models import CustomUser
 from cars.models import Car
@@ -183,6 +184,39 @@ class BusySlot(models.Model):
             raise ValidationError({
                 'end_time': 'Конец занятого интервала должен быть позже начала.'
             })
+
+        schedule = WeekdaySchedule.objects.filter(weekday=self.date.weekday()).first()
+        if schedule is None or not schedule.is_working:
+            raise ValidationError('Нельзя создать занятое время в нерабочий день.')
+
+        if self.start_time < schedule.start_time or self.end_time > schedule.end_time:
+            raise ValidationError('Занятое время должно находиться внутри рабочего интервала.')
+
+        for block in ScheduleBlock.objects.filter(date=self.date):
+            if self.start_time < block.end_time and self.end_time > block.start_time:
+                raise ValidationError('Занятое время пересекается с недоступным интервалом.')
+
+        other_busy = BusySlot.objects.filter(date=self.date).exclude(pk=self.pk)
+        for busy in other_busy:
+            if self.start_time < busy.end_time and self.end_time > busy.start_time:
+                raise ValidationError('Занятое время пересекается с другим занятым интервалом.')
+
+        if self.order_id:
+            if self.order.appointment_at is None:
+                raise ValidationError({'order': 'У выбранного заказа не указано время записи.'})
+
+            settings = AppointmentSettings.objects.first() or AppointmentSettings.objects.create()
+            appointment = timezone.localtime(self.order.appointment_at)
+            expected_end = appointment + timedelta(minutes=settings.appointment_duration)
+
+            if (
+                self.date != appointment.date()
+                or self.start_time != appointment.time().replace(second=0, microsecond=0)
+                or self.end_time != expected_end.time().replace(second=0, microsecond=0)
+            ):
+                raise ValidationError(
+                    'Для занятого времени, связанного с заказом, дата и интервал должны соответствовать записи заказа.'
+                )
 
     def __str__(self):
         order = f' — заказ № {self.order.order_number}' if self.order_id else ''
