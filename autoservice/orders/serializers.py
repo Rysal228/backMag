@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import serializers
 
 from cars.models import Car
@@ -144,6 +145,7 @@ class OrderSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Выбранное время недоступно для записи.')
         return value
 
+    @transaction.atomic
     def create(self, validated_data):
         request = self.context['request']
         status = OrderStatus.objects.filter(is_initial=True).first()
@@ -160,6 +162,7 @@ class OrderSerializer(serializers.ModelSerializer):
         AppointmentAvailabilityService.sync_order_busy_slot(order)
         return order
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         appointment_changed = 'appointment_at' in validated_data
         order = super().update(instance, validated_data)
