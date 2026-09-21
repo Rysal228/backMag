@@ -128,6 +128,10 @@ class AppointmentAvailabilityService:
         if local_datetime < schedule_start or appointment_end > schedule_end:
             return False
 
+        elapsed_minutes = int((local_datetime - schedule_start).total_seconds() // 60)
+        if local_datetime.second or local_datetime.microsecond or elapsed_minutes % settings.slot_interval:
+            return False
+
         if local_datetime <= timezone.now():
             return False
 
