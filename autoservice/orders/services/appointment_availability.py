@@ -21,6 +21,8 @@ class AppointmentAvailabilityService:
                 'working_hours': None,
                 'appointment_duration': settings.appointment_duration,
                 'slot_interval': settings.slot_interval,
+                'first_slot': None,
+                'last_slot': None,
                 'busy_slots': [],
                 'blocked_slots': [],
             }
