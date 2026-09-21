@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework import routers
 
 from .views import (
+    AppointmentAvailabilityView,
     AppointmentScheduleView,
     OrderStatusViewSet,
     OrderViewSet,
@@ -33,5 +34,6 @@ router.register(r'', OrderViewSet, basename='orders')
 
 urlpatterns = [
     path('schedule/', AppointmentScheduleView.as_view(), name='appointmentSchedule'),
+    path('availability/', AppointmentAvailabilityView.as_view(), name='appointmentAvailability'),
     path('', include(router.urls)),
 ]
