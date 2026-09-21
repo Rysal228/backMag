@@ -4,7 +4,6 @@ from rest_framework.views import APIView
 
 from orders.models import AppointmentSettings, Order, ScheduleBlock, WeekdaySchedule, OrderStatus, WorkStatus, WorkType
 from orders.serializers import (
-from orders.serializers import (
     AppointmentAvailabilitySerializer,
     AppointmentScheduleSerializer,
     OrderSerializer,
