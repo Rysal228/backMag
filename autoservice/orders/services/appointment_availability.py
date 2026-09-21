@@ -78,12 +78,14 @@ class AppointmentAvailabilityService:
             },
             'appointment_duration': settings.appointment_duration,
             'slot_interval': settings.slot_interval,
+            'first_slot': first_slot,
+            'last_slot': last_slot,
             'busy_slots': [
                 {
                     'from': appointment.appointment_at.astimezone(timezone.get_current_timezone()).time(),
                     'to': (
                         appointment.appointment_at
-                        + timedelta(minutes=settings.appointment_duration)
+                        + duration
                     ).astimezone(timezone.get_current_timezone()).time(),
                 }
                 for appointment in busy_orders
