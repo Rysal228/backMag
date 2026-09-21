@@ -85,13 +85,19 @@ class AppointmentScheduleSerializer(serializers.Serializer):
 
 
 class TimeIntervalSerializer(serializers.Serializer):
-    from_time = serializers.TimeField(source='from', format='%H:%M')
-    to_time = serializers.TimeField(source='to', format='%H:%M')
+    def to_representation(self, instance):
+        return {
+            'from': instance['from'].strftime('%H:%M'),
+            'to': instance['to'].strftime('%H:%M'),
+        }
 
 
 class WorkingHoursSerializer(serializers.Serializer):
-    from_time = serializers.TimeField(source='from', format='%H:%M')
-    to_time = serializers.TimeField(source='to', format='%H:%M')
+    def to_representation(self, instance):
+        return {
+            'from': instance['from'].strftime('%H:%M'),
+            'to': instance['to'].strftime('%H:%M'),
+        }
 
 
 class AppointmentAvailabilitySerializer(serializers.Serializer):
