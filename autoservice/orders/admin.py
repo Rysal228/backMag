@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from orders.models import (
     AppointmentSettings,
+    BusySlot,
     Order,
     OrderStatus,
     ScheduleBlock,
@@ -9,6 +10,8 @@ from orders.models import (
     WorkStatus,
     WorkType,
 )
+from orders.services.appointment_availability import AppointmentAvailabilityService
+
 
 
 @admin.register(WorkType)
@@ -56,8 +59,26 @@ class ScheduleBlockAdmin(admin.ModelAdmin):
     ordering = ('date', 'start_time')
 
 
+@admin.register(BusySlot)
+class BusySlotAdmin(admin.ModelAdmin):
+    list_display = ('date', 'start_time', 'end_time', 'order')
+    list_filter = ('date',)
+    search_fields = ('order__order_number',)
+    ordering = ('date', 'start_time')
+
+
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
     list_display = ('order_number', 'customer', 'car', 'work_type', 'status', 'work_status', 'appointment_at', 'price')
     list_filter = ('status', 'work_status', 'work_type')
     search_fields = ('order_number', 'customer__phone', 'car__plate_number')
+
+    def save_model(self, request, obj, form, change):
+        previous_appointment = None
+        if change:
+            previous_appointment = Order.objects.get(pk=obj.pk).appointment_at
+
+        super().save_model(request, obj, form, change)
+
+        if not change or previous_appointment != obj.appointment_at:
+            AppointmentAvailabilityService.sync_order_busy_slot(obj)
