@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db import transaction
 
 from orders.models import (
     AppointmentSettings,
@@ -73,6 +74,7 @@ class OrderAdmin(admin.ModelAdmin):
     list_filter = ('status', 'work_status', 'work_type')
     search_fields = ('order_number', 'customer__phone', 'car__plate_number')
 
+    @transaction.atomic
     def save_model(self, request, obj, form, change):
         previous_appointment = None
         if change:
