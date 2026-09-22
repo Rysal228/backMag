@@ -104,6 +104,3 @@ class NewsAdmin(admin.ModelAdmin):
     ordering = (
         '-created_at',
     )
-
-
-admin.site.unregister(NewsRole) if NewsRole in admin.site._registry else None
