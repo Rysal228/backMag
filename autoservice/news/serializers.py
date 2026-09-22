@@ -12,6 +12,10 @@ class NewsSerializer(serializers.ModelSerializer):
         source='updated_at',
         read_only=True,
     )
+    isGlobal = serializers.BooleanField(
+        source='is_global',
+        read_only=True,
+    )
     roles = serializers.SerializerMethodField()
 
     class Meta:
@@ -21,7 +25,7 @@ class NewsSerializer(serializers.ModelSerializer):
             'title',
             'content',
             'image',
-            'is_global',
+            'isGlobal',
             'roles',
             'createdAt',
             'updatedAt',
