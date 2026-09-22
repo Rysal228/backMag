@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import permissions, viewsets
 
 from .models import News
@@ -14,8 +15,8 @@ class NewsViewSet(viewsets.ReadOnlyModelViewSet):
         return (
             News.objects
             .filter(
-                models.Q(is_global=True)
-                | models.Q(role_targets__role=role),
+                Q(is_global=True)
+                | Q(role_targets__role=role),
             )
             .prefetch_related('role_targets')
             .distinct()
