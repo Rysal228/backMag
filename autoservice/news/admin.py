@@ -56,14 +56,6 @@ class NewsAdminForm(forms.ModelForm):
 
         return cleaned_data
 
-    def save(self, commit=True):
-        news = super().save(commit=commit)
-
-        if commit:
-            self.save_roles(news)
-
-        return news
-
     def save_m2m(self):
         super().save_m2m()
         self.save_roles(self.instance)
