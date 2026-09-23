@@ -45,5 +45,6 @@ class NewsViewSet(viewsets.ReadOnlyModelViewSet):
                 | Q(role_targets__role__in=accessible_roles),
             )
             .prefetch_related('role_targets')
+            .order_by('-created_at', '-id')
             .distinct()
         )
