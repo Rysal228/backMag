@@ -1,5 +1,6 @@
 from django.db.models import Q
 from rest_framework import permissions, viewsets
+from rest_framework.pagination import LimitOffsetPagination
 
 from users.models import UserRole
 
@@ -23,9 +24,15 @@ ROLE_ACCESS: dict[UserRole, tuple[UserRole, ...]] = {
 }
 
 
+class NewsPagination(LimitOffsetPagination):
+    default_limit = 10
+    max_limit = 50
+
+
 class NewsViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = NewsSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = NewsPagination
 
     def get_queryset(self):
         role = self.request.user.role
