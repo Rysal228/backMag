@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'users.apps.UsersConfig',
     'cars.apps.CarsConfig',
     'orders.apps.OrdersConfig',
+    'news.apps.NewsConfig',
     'corsheaders',
     'rest_framework',
     'rest_framework.authtoken',
