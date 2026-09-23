@@ -29,9 +29,11 @@ class NewsAdminForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         if self.instance.pk:
-            self.fields['roles'].initial = self.instance.role_targets.values_list(
-                'role',
-                flat=True,
+            self.fields['roles'].initial = list(
+                self.instance.role_targets.values_list(
+                    'role',
+                    flat=True,
+                )
             )
 
     def clean(self):
@@ -55,17 +57,6 @@ class NewsAdminForm(forms.ModelForm):
             cleaned_data['roles'] = []
 
         return cleaned_data
-
-    def save_m2m(self):
-        super().save_m2m()
-        self.save_roles(self.instance)
-
-    def save_roles(self, news):
-        NewsRole.objects.filter(news=news).delete()
-        NewsRole.objects.bulk_create([
-            NewsRole(news=news, role=role)
-            for role in self.cleaned_data.get('roles', [])
-        ])
 
 
 @admin.register(News)
@@ -96,3 +87,16 @@ class NewsAdmin(admin.ModelAdmin):
     ordering = (
         '-created_at',
     )
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+
+        NewsRole.objects.filter(news=form.instance).delete()
+
+        if not form.cleaned_data.get('is_global'):
+            NewsRole.objects.bulk_create(
+                [
+                    NewsRole(news=form.instance, role=role)
+                    for role in form.cleaned_data.get('roles', [])
+                ],
+            )
