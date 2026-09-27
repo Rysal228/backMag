@@ -96,7 +96,7 @@ DATABASES = {
         'NAME': 'servicecar',
         'USER': 'servicecar_django',
         'PASSWORD': 'Baba1234',
-        'HOST': 'host.docker.internal',
+        'HOST': '172.18.0.1',
         'PORT': '5432',
     }
 }
