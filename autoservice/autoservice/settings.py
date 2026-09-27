@@ -92,8 +92,12 @@ WSGI_APPLICATION = 'autoservice.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'servicecar',
+        'USER': 'servicecar_django',
+        'PASSWORD': 'Baba1234',
+        'HOST': 'host.docker.internal',
+        'PORT': '5432',
     }
 }
 
