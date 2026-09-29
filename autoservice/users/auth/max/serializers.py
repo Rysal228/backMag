@@ -2,7 +2,8 @@ from rest_framework import serializers
 
 
 class MaxAuthSerializer(serializers.Serializer):
-    init_data = serializers.CharField(
+    initData = serializers.CharField(
+        source='init_data',
         write_only=True,
     )
 
@@ -10,10 +11,12 @@ class MaxAuthSerializer(serializers.Serializer):
         max_length=20,
     )
 
-    phone_auth_date = serializers.CharField(
+    phoneAuthDate = serializers.CharField(
+        source='phone_auth_date',
         write_only=True,
     )
 
-    phone_hash = serializers.CharField(
+    phoneHash = serializers.CharField(
+        source='phone_hash',
         write_only=True,
     )
