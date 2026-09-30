@@ -23,6 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-&#aisvpyqmt6#704owjvwght0o3ifg-d^s1w+_(zj^d48wb0-c'
+MAX_BOT_TOKEN = os.environ['MAX_BOT_TOKEN']
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -92,14 +93,11 @@ WSGI_APPLICATION = 'autoservice.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'servicecar',
-        'USER': 'servicecar_django',
-        'PASSWORD': 'Baba1234',
-        'HOST': '172.18.0.1',
-        'PORT': '5432',
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
 
 
 # Password validation
