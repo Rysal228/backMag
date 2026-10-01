@@ -55,14 +55,14 @@ class MaxInitDataValidator:
 
         if not pairs:
             raise AuthenticationFailed(
-                'MAX initData is empty.',
+                'Данные авторизации MAX отсутствуют.',
             )
 
         keys = [key for key, _ in pairs]
 
         if len(keys) != len(set(keys)):
             raise AuthenticationFailed(
-                'MAX initData contains duplicate parameters.',
+                'Данные авторизации MAX содержат повторяющиеся параметры.',
             )
 
         return dict(pairs)
@@ -76,7 +76,7 @@ class MaxInitDataValidator:
 
         if not received_hash:
             raise AuthenticationFailed(
-                'MAX initData hash is missing.',
+                'Подпись данных авторизации MAX отсутствует.',
             )
 
         data_check_string = '\n'.join(
@@ -102,7 +102,7 @@ class MaxInitDataValidator:
             received_hash,
         ):
             raise AuthenticationFailed(
-                'Invalid MAX initData signature.',
+                'Некорректная подпись данных авторизации MAX.',
             )
 
     @staticmethod
@@ -113,19 +113,19 @@ class MaxInitDataValidator:
             auth_date = int(params['auth_date'])
         except (KeyError, ValueError):
             raise AuthenticationFailed(
-                'Invalid MAX auth_date.',
+                'Некорректная дата авторизации MAX.',
             )
 
         now = int(time.time())
 
         if auth_date > now:
             raise AuthenticationFailed(
-                'MAX auth_date is in the future.',
+                'Дата авторизации MAX находится в будущем.',
             )
 
         if now - auth_date > MAX_INIT_DATA_MAX_AGE:
             raise AuthenticationFailed(
-                'MAX initData has expired.',
+                'Срок действия данных авторизации MAX истёк.',
             )
 
         return auth_date
@@ -138,14 +138,14 @@ class MaxInitDataValidator:
             user = json.loads(params['user'])
         except (KeyError, json.JSONDecodeError):
             raise AuthenticationFailed(
-                'Invalid MAX user data.',
+                'Некорректные данные пользователя MAX.',
             )
 
         user_id = user.get('id')
 
         if not isinstance(user_id, int):
             raise AuthenticationFailed(
-                'Invalid MAX user id.',
+                'Некорректный идентификатор пользователя MAX.',
             )
 
         return user
@@ -181,26 +181,26 @@ class MaxContactValidator:
             received_hash,
         ):
             raise AuthenticationFailed(
-                'Invalid MAX phone signature.',
+                'Некорректная подпись номера телефона MAX.',
             )
 
     @staticmethod
     def _validate_auth_date(auth_date: str) -> None:
         try:
-            timestamp = int(auth_date)
+            timestamp = int(auth_date) // 1000
         except (TypeError, ValueError):
             raise AuthenticationFailed(
-                'Invalid MAX phone auth_date.',
+                'Некорректная дата авторизации MAX.',
             )
 
         now = int(time.time())
 
         if timestamp > now:
             raise AuthenticationFailed(
-                'MAX phone auth_date is in the future.',
+                'Дата авторизации MAX находится в будущем.',
             )
 
         if now - timestamp > MAX_CONTACT_MAX_AGE:
             raise AuthenticationFailed(
-                'MAX phone verification has expired.',
+                'Срок действия подтверждения телефона MAX истёк.',
             )
