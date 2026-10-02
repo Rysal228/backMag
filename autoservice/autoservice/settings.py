@@ -24,6 +24,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-&#aisvpyqmt6#704owjvwght0o3ifg-d^s1w+_(zj^d48wb0-c'
 MAX_BOT_TOKEN = os.environ['MAX_BOT_TOKEN']
+MAX_BOT_API_BASE_URL = os.environ.get(
+    'MAX_BOT_API_BASE_URL',
+    'https://platform-api2.max.ru',
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
