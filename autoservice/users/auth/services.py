@@ -18,12 +18,12 @@ class AuthService:
 
         if user is None:
             raise AuthenticationFailed(
-                'Invalid phone or password.'
+                'Неверный номер телефона или пароль.'
             )
 
         if not user.is_active:
             raise AuthenticationFailed(
-                'User is inactive.'
+                'Пользователь деактивирован.'
             )
 
         return create_auth_tokens(user)

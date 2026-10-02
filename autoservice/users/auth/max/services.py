@@ -17,8 +17,8 @@ class MaxAccountConflict(APIException):
     status_code = 409
     default_code = 'max_account_conflict'
     default_detail = (
-        'This phone number is already linked '
-        'to another MAX account.'
+        'Этот номер телефона или аккаунт MAX уже связан '
+        'с другой учётной записью.'
     )
 
 
@@ -45,6 +45,14 @@ class MaxAuthService:
         )
 
         max_user_id = str(max_data.user_id)
+
+        # A MAX account must not be silently moved between phone accounts.
+        max_user = User.objects.select_for_update().filter(
+            messenger_user_id=max_user_id,
+        ).first()
+
+        if max_user is not None and max_user.phone != phone:
+            raise MaxAccountConflict()
 
         user = (
             User.objects

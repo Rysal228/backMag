@@ -36,6 +36,7 @@ class CustomUserViewSet(viewsets.ReadOnlyModelViewSet):
 
         return queryset.filter(role=role)
 
+
 class ProfileCustomUserView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -60,6 +61,7 @@ class ProfileCustomUserView(APIView):
             'user': serializer.data,
         })
 
+
 class LogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -67,23 +69,17 @@ class LogoutView(APIView):
         refresh_token = request.data.get('refreshToken')
 
         if not refresh_token:
-            return Response(
-                {
-                    'detail': 'Refresh token is required.',
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            raise ValidationError({
+                'refreshToken': 'Refresh token is required.',
+            })
 
         try:
             token = RefreshToken(refresh_token)
             token.blacklist()
         except TokenError:
-            return Response(
-                {
-                    'detail': 'Invalid refresh token.',
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            raise ValidationError({
+                'refreshToken': 'Invalid refresh token.',
+            })
 
         return Response(
             status=status.HTTP_204_NO_CONTENT,
