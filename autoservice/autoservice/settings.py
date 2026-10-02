@@ -10,6 +10,12 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 import os
+import sys
+
+if sys.platform == 'win32':
+    import truststore
+
+    truststore.inject_into_ssl()
 from inspect import CORO_SUSPENDED
 from pathlib import Path
 from datetime import timedelta
