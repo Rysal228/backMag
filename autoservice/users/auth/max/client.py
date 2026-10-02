@@ -16,21 +16,21 @@ class MaxBotClient:
         ).rstrip('/')
 
     def send_message_to_user(self, *, user_id: str, text: str) -> dict:
-        response = requests.post(
-            f'{self.base_url}/messages',
-            params={'user_id': user_id},
-            headers={
-                'Authorization': self.token,
-                'Content-Type': 'application/json',
-            },
-            json={'text': text},
-            timeout=10,
-        )
-
-        if not response.ok:
-            raise MaxBotApiError(
-                f'MAX Bot API returned HTTP {response.status_code}: '
-                f'{response.text}'
+        try:
+            response = requests.post(
+                f'{self.base_url}/messages',
+                params={'user_id': user_id},
+                headers={
+                    'Authorization': self.token,
+                    'Content-Type': 'application/json',
+                },
+                json={'text': text},
+                timeout=10,
             )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise MaxBotApiError(
+                f'MAX Bot API request failed: {exc}'
+            ) from exc
 
         return response.json()
