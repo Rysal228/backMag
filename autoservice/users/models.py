@@ -73,3 +73,24 @@ class CustomUser(AbstractUser):
             )
             if part
         )
+
+
+class MaxAuthCode(models.Model):
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name='max_auth_codes',
+    )
+    code_hash = models.CharField(max_length=128)
+    expires_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=['user', '-created_at'],
+                name='max_auth_code_user_created_idx',
+            ),
+        ]
