@@ -1,9 +1,19 @@
+import secrets
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import check_password, make_password
 from django.db import transaction
-from rest_framework.exceptions import AuthenticationFailed, APIException
+from django.utils import timezone
+from rest_framework.exceptions import (
+    APIException,
+    AuthenticationFailed,
+    Throttled,
+)
 
 from ..services import PhoneNormalizer
 from ..tokens import create_auth_tokens
+from .client import MaxBotApiError, MaxBotClient
 from .validators import (
     MaxContactValidator,
     MaxInitDataValidator,
@@ -11,6 +21,10 @@ from .validators import (
 
 
 User = get_user_model()
+
+MAX_CODE_TTL = timedelta(minutes=5)
+MAX_CODE_RESEND_INTERVAL = timedelta(seconds=60)
+MAX_CODE_MAX_ATTEMPTS = 5
 
 
 class MaxAccountConflict(APIException):
@@ -20,6 +34,12 @@ class MaxAccountConflict(APIException):
         'Этот номер телефона или аккаунт MAX уже связан '
         'с другой учётной записью.'
     )
+
+
+class MaxCodeDeliveryError(APIException):
+    status_code = 502
+    default_code = 'max_code_delivery_failed'
+    default_detail = 'Не удалось отправить код в MAX.'
 
 
 class MaxAuthService:
@@ -46,7 +66,6 @@ class MaxAuthService:
 
         max_user_id = str(max_data.user_id)
 
-        # A MAX account must not be silently moved between phone accounts.
         max_user = User.objects.select_for_update().filter(
             messenger_user_id=max_user_id,
         ).first()
@@ -82,6 +101,121 @@ class MaxAuthService:
             raise AuthenticationFailed(
                 'User is inactive.',
             )
+
+        return create_auth_tokens(user)
+
+    @staticmethod
+    @transaction.atomic
+    def request_code(*, phone: str) -> None:
+        phone = PhoneNormalizer.normalize(phone)
+
+        user = (
+            User.objects
+            .select_for_update()
+            .filter(phone=phone)
+            .first()
+        )
+
+        if user is None or not user.is_active:
+            raise AuthenticationFailed(
+                'Не удалось отправить код для указанного номера телефона.'
+            )
+
+        if not user.messenger_user_id:
+            raise AuthenticationFailed(
+                'Для этого пользователя не настроена авторизация через MAX.'
+            )
+
+        now = timezone.now()
+        previous_code = (
+            MaxAuthCode.objects
+            .filter(user=user)
+            .order_by('-created_at')
+            .first()
+        )
+
+        if (
+            previous_code is not None
+            and now - previous_code.created_at < MAX_CODE_RESEND_INTERVAL
+        ):
+            raise Throttled(
+                detail='Повторно запросить код можно через 60 секунд.'
+            )
+
+        code = f'{secrets.randbelow(1_000_000):06d}'
+        auth_code = MaxAuthCode.objects.create(
+            user=user,
+            code_hash=make_password(code),
+            expires_at=now + MAX_CODE_TTL,
+        )
+
+        try:
+            MaxBotClient().send_message_to_user(
+                user_id=user.messenger_user_id,
+                text=(
+                    'Код для входа в ServiceCar: '
+                    f'{code}\n\n'
+                    'Код действует 5 минут. Никому его не сообщайте.'
+                ),
+            )
+        except MaxBotApiError as exc:
+            auth_code.delete()
+            raise MaxCodeDeliveryError() from exc
+
+    @staticmethod
+    @transaction.atomic
+    def verify_code(*, phone: str, code: str) -> dict[str, str]:
+        phone = PhoneNormalizer.normalize(phone)
+        user = (
+            User.objects
+            .select_for_update()
+            .filter(phone=phone)
+            .first()
+        )
+
+        if user is None or not user.is_active:
+            raise AuthenticationFailed(
+                'Неверный номер телефона или код.'
+            )
+
+        auth_code = (
+            MaxAuthCode.objects
+            .select_for_update()
+            .filter(user=user)
+            .order_by('-created_at')
+            .first()
+        )
+
+        if auth_code is None:
+            raise AuthenticationFailed(
+                'Неверный номер телефона или код.'
+            )
+
+        if auth_code.used_at is not None:
+            raise AuthenticationFailed(
+                'Код уже использован.'
+            )
+
+        if timezone.now() >= auth_code.expires_at:
+            raise AuthenticationFailed(
+                'Срок действия кода истёк.'
+            )
+
+        if auth_code.attempts >= MAX_CODE_MAX_ATTEMPTS:
+            raise AuthenticationFailed(
+                'Превышено количество попыток ввода кода.'
+            )
+
+        if not check_password(code, auth_code.code_hash):
+            auth_code.attempts += 1
+            auth_code.save(update_fields=['attempts'])
+
+            raise AuthenticationFailed(
+                'Неверный номер телефона или код.'
+            )
+
+        auth_code.used_at = timezone.now()
+        auth_code.save(update_fields=['used_at'])
 
         return create_auth_tokens(user)
 
