@@ -11,6 +11,7 @@ from rest_framework.exceptions import (
     Throttled,
 )
 
+from ...models import MaxAuthCode
 from ..services import PhoneNormalizer
 from ..tokens import create_auth_tokens
 from .client import MaxBotApiError, MaxBotClient
