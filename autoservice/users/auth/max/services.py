@@ -154,7 +154,7 @@ class MaxAuthService:
             MaxBotClient().send_message_to_user(
                 user_id=user.messenger_user_id,
                 text=(
-                    'Код для входа в ServiceCar: '
+                    'Код для входа в автосервис: '
                     f'{code}\n\n'
                     'Код действует 5 минут. Никому его не сообщайте.'
                 ),
