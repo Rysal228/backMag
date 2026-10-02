@@ -3,11 +3,10 @@ from django.conf import settings
 
 
 class MaxBotApiError(Exception):
-    """Raised when MAX Bot API rejects a request or is unavailable."""
+    """На случай ошибок клиента"""
 
 
 class MaxBotClient:
-    """Small client for server-to-server requests to the MAX Bot API."""
 
     def __init__(self, *, token: str | None = None, base_url: str | None = None):
         self.token = token or settings.MAX_BOT_TOKEN
