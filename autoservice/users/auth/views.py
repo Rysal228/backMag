@@ -5,7 +5,9 @@ from rest_framework.views import APIView
 
 from .serializers import (
     LoginSerializer,
-    RegisterSerializer, RefreshTokenSerializer, PasswordSerializer,
+    PasswordSerializer,
+    RefreshTokenSerializer,
+    RegisterSerializer,
 )
 from .services import AuthService
 
@@ -58,6 +60,11 @@ class RegisterView(APIView):
 class PasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        return Response({
+            'hasPassword': request.user.has_usable_password(),
+        })
+
     def post(self, request):
         serializer = PasswordSerializer(
             data=request.data,
@@ -69,7 +76,8 @@ class PasswordView(APIView):
 
         AuthService.set_password(
             user=request.user,
-            password=serializer.validated_data['password'],
+            current_password=serializer.validated_data.get('currentPassword'),
+            new_password=serializer.validated_data['newPassword'],
         )
 
         return Response(
