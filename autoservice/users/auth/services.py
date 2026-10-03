@@ -1,4 +1,6 @@
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.hashers import check_password
+from django.contrib.auth.password_validation import validate_password
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 
 from .tokens import create_auth_tokens
@@ -55,6 +57,27 @@ class AuthService:
         )
 
         return create_auth_tokens(user)
+
+    @staticmethod
+    def set_password(
+        *,
+        user,
+        current_password: str | None,
+        new_password: str,
+    ) -> None:
+        if user.has_usable_password():
+            if not current_password or not check_password(
+                current_password,
+                user.password,
+            ):
+                raise AuthenticationFailed(
+                    'Неверный текущий пароль.'
+                )
+
+        validate_password(new_password, user)
+
+        user.set_password(new_password)
+        user.save(update_fields=['password'])
 
 
 class PhoneNormalizer:
