@@ -70,9 +70,9 @@ class AuthService:
                 current_password,
                 user.password,
             ):
-                raise AuthenticationFailed(
-                    'Неверный текущий пароль.'
-                )
+                raise ValidationError({
+                    'currentPassword': 'Неверный текущий пароль.'
+                })
 
         validate_password(new_password, user)
 
