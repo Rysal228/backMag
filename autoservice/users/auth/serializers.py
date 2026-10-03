@@ -1,8 +1,9 @@
 import re
 
+from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
-from django.contrib.auth.password_validation import validate_password
+
 
 def validate_phone(value: str) -> str:
     phone = value.strip()
@@ -62,15 +63,21 @@ class RegisterSerializer(serializers.Serializer):
 
 
 class PasswordSerializer(serializers.Serializer):
-    password = serializers.CharField(
+    currentPassword = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+    )
+    newPassword = serializers.CharField(
         write_only=True,
         min_length=8,
     )
 
-    def validate_password(self, value):
+    def validate_newPassword(self, value):
         validate_password(value)
 
         return value
+
 
 class RefreshTokenSerializer(TokenRefreshSerializer):
     def validate(self, attrs):
