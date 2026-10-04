@@ -7,6 +7,12 @@ class MaxAuthSerializer(serializers.Serializer):
         write_only=True,
     )
     phone = serializers.CharField(max_length=20, required=False)
+    forceContact = serializers.BooleanField(
+        source='force_contact',
+        required=False,
+        default=False,
+        write_only=True,
+    )
     phoneAuthDate = serializers.CharField(
         source='phone_auth_date',
         write_only=True,
