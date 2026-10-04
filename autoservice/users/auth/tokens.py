@@ -3,6 +3,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 def create_auth_tokens(user) -> dict[str, str]:
     refresh = RefreshToken.for_user(user)
+    refresh['auth_method'] = 'password'
 
     return {
         'accessToken': str(refresh.access_token),
