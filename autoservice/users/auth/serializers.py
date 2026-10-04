@@ -1,14 +1,21 @@
 import re
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+
+from .tokens import create_auth_tokens
+
+User = get_user_model()
 
 
 def validate_phone(value: str) -> str:
     phone = value.strip()
 
-    if not re.fullmatch(r'\+7\d{10}', phone):
+    if not re.fullmatch(r'\\+7\\d{10}', phone):
         raise serializers.ValidationError(
             'Введите корректный номер телефона в формате +7XXXXXXXXXX.'
         )
@@ -81,9 +88,39 @@ class PasswordSerializer(serializers.Serializer):
 
 class RefreshTokenSerializer(TokenRefreshSerializer):
     def validate(self, attrs):
+        refresh_token = RefreshToken(attrs['refresh'])
+
+        if refresh_token.get('auth_method') == 'max':
+            self._validate_max_binding(refresh_token)
+
         data = super().validate(attrs)
 
         return {
             'accessToken': data['access'],
             'refreshToken': data.get('refresh'),
         }
+
+    @staticmethod
+    def _validate_max_binding(refresh_token: RefreshToken) -> None:
+        user_id = refresh_token.get('user_id')
+        messenger_user_id = refresh_token.get('messenger_user_id')
+        max_verified_phone = refresh_token.get('max_verified_phone')
+
+        if not user_id or not messenger_user_id or not max_verified_phone:
+            raise AuthenticationFailed(
+                detail='MAX-сессия больше не действительна.',
+                code='max_session_invalid',
+            )
+
+        user = User.objects.filter(pk=user_id).first()
+
+        if (
+            user is None
+            or not user.is_active
+            or user.messenger_user_id != messenger_user_id
+            or user.phone != max_verified_phone
+        ):
+            raise AuthenticationFailed(
+                detail='MAX-сессия больше не действительна.',
+                code='max_session_invalid',
+            )
