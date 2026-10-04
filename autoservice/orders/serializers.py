@@ -133,8 +133,11 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def validate_car(self, value: Car):
         request = self.context.get('request')
-        if request and value.owner_id != request.user.id:
-            raise serializers.ValidationError('Выбранный автомобиль вам не принадлежит.')
+        if request and (
+            value.owner_id != request.user.id
+            or value.is_archived
+        ):
+            raise serializers.ValidationError('Выбранный автомобиль недоступен для создания заказа.')
         return value
 
     def validate_appointmentAt(self, value):
