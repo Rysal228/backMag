@@ -48,7 +48,7 @@ class Car(models.Model):
         verbose_name_plural = 'Автомобили'
         constraints = [
             models.UniqueConstraint(
-                condition=Q(vin__isnull=False),
+                condition=Q(vin__isnull=False) & ~Q(vin=''),
                 fields=('vin',),
                 name='unique_car_vin',
             ),
