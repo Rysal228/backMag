@@ -241,10 +241,6 @@ class Order(models.Model):
     price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def clean(self):
-        if self.customer_id and self.car_id and self.car.owner_id != self.customer_id:
-            raise ValidationError('Автомобиль не принадлежит выбранному клиенту.')
-
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
