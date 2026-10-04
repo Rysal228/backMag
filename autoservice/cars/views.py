@@ -1,7 +1,10 @@
-from rest_framework import permissions, viewsets
+from rest_framework import permissions, status, viewsets
 
 from cars.models import Car, CarBrand, CarModel
 from cars.serializers import CarSerializer, CarBrandSerializer, CarModelSerializer
+from orders.serializers import OrderSerializer
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 
 class CarBrandViewSet(viewsets.ReadOnlyModelViewSet):
@@ -35,6 +38,18 @@ class CarViewSet(viewsets.ModelViewSet):
             .select_related('brand', 'model')
             .order_by('brand__name', 'model__name')
         )
+
+    @action(detail=True, methods=['get'])
+    def orders(self, request, pk=None):
+        car = self.get_object()
+        orders = (
+            car.orders
+            .select_related('car__brand', 'car__model', 'work_type', 'status', 'work_status')
+            .order_by('-created_at')
+        )
+
+        serializer = OrderSerializer(orders, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
