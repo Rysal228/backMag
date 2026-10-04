@@ -10,6 +10,11 @@ from rest_framework_simplejwt.tokens import RefreshToken
 User = get_user_model()
 
 
+class MaxSessionInvalid(AuthenticationFailed):
+    default_code = 'max_session_invalid'
+    default_detail = 'MAX-сессия больше не действительна.'
+
+
 def validate_phone(value: str) -> str:
     phone = value.strip()
 
@@ -105,10 +110,7 @@ class RefreshTokenSerializer(TokenRefreshSerializer):
         max_verified_phone = refresh_token.get('max_verified_phone')
 
         if not user_id or not messenger_user_id or not max_verified_phone:
-            raise AuthenticationFailed(
-                detail='MAX-сессия больше не действительна.',
-                code='max_session_invalid',
-            )
+            raise MaxSessionInvalid()
 
         user = User.objects.filter(pk=user_id).first()
 
