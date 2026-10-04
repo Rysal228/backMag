@@ -13,7 +13,7 @@ User = get_user_model()
 def validate_phone(value: str) -> str:
     phone = value.strip()
 
-    if not re.fullmatch(r'\\+7\\d{10}', phone):
+    if not re.fullmatch(r'\+7\d{10}', phone):
         raise serializers.ValidationError(
             'Введите корректный номер телефона в формате +7XXXXXXXXXX.'
         )
