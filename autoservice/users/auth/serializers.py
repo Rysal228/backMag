@@ -123,7 +123,4 @@ class RefreshTokenSerializer(TokenRefreshSerializer):
             or user.messenger_user_id != messenger_user_id
             or user.phone != max_verified_phone
         ):
-            raise AuthenticationFailed(
-                detail='MAX-сессия больше не действительна.',
-                code='max_session_invalid',
-            )
+            raise MaxSessionInvalid()
