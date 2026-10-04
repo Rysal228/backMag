@@ -13,7 +13,7 @@ from rest_framework.exceptions import (
 
 from ...models import MaxAuthCode
 from ..services import PhoneNormalizer
-from ..tokens import create_auth_tokens
+from ..tokens import create_max_auth_tokens
 from .client import MaxBotApiError, MaxBotClient
 from .validators import (
     MaxContactValidator,
@@ -70,7 +70,11 @@ class MaxAuthService:
                 raise AuthenticationFailed('User is inactive.')
 
             if phone is None:
-                return create_auth_tokens(max_user)
+                return create_max_auth_tokens(
+                    max_user,
+                    messenger_user_id=max_user_id,
+                    max_verified_phone=max_user.phone,
+                )
 
             normalized_phone = PhoneNormalizer.normalize(phone)
             MaxContactValidator.validate(
@@ -81,7 +85,11 @@ class MaxAuthService:
             )
             if max_user.phone != normalized_phone:
                 raise MaxAccountConflict()
-            return create_auth_tokens(max_user)
+            return create_max_auth_tokens(
+                max_user,
+                messenger_user_id=max_user_id,
+                max_verified_phone=max_user.phone,
+            )
 
         if phone is None:
             return {'status': 'contact_required'}
@@ -121,7 +129,11 @@ class MaxAuthService:
         if not user.is_active:
             raise AuthenticationFailed('User is inactive.')
 
-        return create_auth_tokens(user)
+        return create_max_auth_tokens(
+            user,
+            messenger_user_id=max_user_id,
+            max_verified_phone=user.phone,
+        )
 
     @staticmethod
     @transaction.atomic
@@ -236,7 +248,11 @@ class MaxAuthService:
         auth_code.used_at = timezone.now()
         auth_code.save(update_fields=['used_at'])
 
-        return create_auth_tokens(user)
+        return create_max_auth_tokens(
+            user,
+            messenger_user_id=user.messenger_user_id,
+            max_verified_phone=user.phone,
+        )
 
     @staticmethod
     def _create_user(
