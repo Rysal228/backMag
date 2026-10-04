@@ -1,10 +1,10 @@
 from rest_framework import permissions, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from cars.models import Car, CarBrand, CarModel
 from cars.serializers import CarSerializer, CarBrandSerializer, CarModelSerializer
 from orders.serializers import OrderSerializer
-from rest_framework.decorators import action
-from rest_framework.response import Response
 
 
 class CarBrandViewSet(viewsets.ReadOnlyModelViewSet):
@@ -34,7 +34,7 @@ class CarViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return (
             Car.objects
-            .filter(owner=self.request.user)
+            .filter(owner=self.request.user, is_archived=False)
             .select_related('brand', 'model')
             .order_by('brand__name', 'model__name')
         )
@@ -45,6 +45,7 @@ class CarViewSet(viewsets.ModelViewSet):
         orders = (
             car.orders
             .select_related('car__brand', 'car__model', 'work_type', 'status', 'work_status')
+            .filter(customer=request.user)
             .order_by('-created_at')
         )
 
@@ -53,3 +54,7 @@ class CarViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
+
+    def perform_destroy(self, instance):
+        instance.is_archived = True
+        instance.save(update_fields=['is_archived'])
