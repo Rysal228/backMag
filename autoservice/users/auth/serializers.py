@@ -5,7 +5,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 
 User = get_user_model()
 
@@ -91,9 +91,12 @@ class PasswordSerializer(serializers.Serializer):
 
 class RefreshTokenSerializer(TokenRefreshSerializer):
     def validate(self, attrs):
-        refresh_token = RefreshToken(attrs['refresh'])
+        try:
+            refresh_token = RefreshToken(attrs['refresh'])
+        except TokenError:
+            refresh_token = None
 
-        if refresh_token.get('auth_method') == 'max':
+        if refresh_token is not None and refresh_token.get('auth_method') == 'max':
             self._validate_max_binding(refresh_token)
 
         data = super().validate(attrs)
