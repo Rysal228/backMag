@@ -53,6 +53,7 @@ class MaxAuthService:
         phone: str | None = None,
         phone_auth_date: str | None = None,
         phone_hash: str | None = None,
+        force_contact: bool = False,
     ) -> dict[str, str]:
         max_data = MaxInitDataValidator.validate(init_data)
         max_user_id = str(max_data.user_id)
@@ -69,7 +70,7 @@ class MaxAuthService:
             if not max_user.is_active:
                 raise AuthenticationFailed('User is inactive.')
 
-            if phone is None:
+            if phone is None and not force_contact:
                 return create_max_auth_tokens(
                     max_user,
                     messenger_user_id=max_user_id,
