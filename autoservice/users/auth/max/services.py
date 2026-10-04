@@ -50,29 +50,49 @@ class MaxAuthService:
     def authenticate(
         *,
         init_data: str,
-        phone: str,
-        phone_auth_date: str,
-        phone_hash: str,
+        phone: str | None = None,
+        phone_auth_date: str | None = None,
+        phone_hash: str | None = None,
     ) -> dict[str, str]:
         max_data = MaxInitDataValidator.validate(init_data)
+        max_user_id = str(max_data.user_id)
+
+        max_user = (
+            User.objects
+            .select_for_update()
+            .filter(messenger_user_id=max_user_id)
+            .first()
+        )
+
+        # Existing MAX account: no phone permission is needed again.
+        if max_user is not None:
+            if not max_user.is_active:
+                raise AuthenticationFailed('User is inactive.')
+
+            if phone is None:
+                return create_auth_tokens(max_user)
+
+            normalized_phone = PhoneNormalizer.normalize(phone)
+            MaxContactValidator.validate(
+                phone=normalized_phone,
+                auth_date=phone_auth_date,
+                received_hash=phone_hash,
+                user_id=max_data.user_id,
+            )
+            if max_user.phone != normalized_phone:
+                raise MaxAccountConflict()
+            return create_auth_tokens(max_user)
+
+        if phone is None:
+            return {'status': 'contact_required'}
 
         phone = PhoneNormalizer.normalize(phone)
-
         MaxContactValidator.validate(
             phone=phone,
             auth_date=phone_auth_date,
             received_hash=phone_hash,
             user_id=max_data.user_id,
         )
-
-        max_user_id = str(max_data.user_id)
-
-        max_user = User.objects.select_for_update().filter(
-            messenger_user_id=max_user_id,
-        ).first()
-
-        if max_user is not None and max_user.phone != phone:
-            raise MaxAccountConflict()
 
         user = (
             User.objects
@@ -99,9 +119,7 @@ class MaxAuthService:
             )
 
         if not user.is_active:
-            raise AuthenticationFailed(
-                'User is inactive.',
-            )
+            raise AuthenticationFailed('User is inactive.')
 
         return create_auth_tokens(user)
 
