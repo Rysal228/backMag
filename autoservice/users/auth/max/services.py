@@ -77,6 +77,9 @@ class MaxAuthService:
                     max_verified_phone=max_user.phone,
                 )
 
+            if phone is None:
+                return {'status': 'contact_required'}
+
             normalized_phone = PhoneNormalizer.normalize(phone)
             MaxContactValidator.validate(
                 phone=normalized_phone,
