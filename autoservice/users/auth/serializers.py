@@ -7,8 +7,6 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .tokens import create_auth_tokens
-
 User = get_user_model()
 
 
