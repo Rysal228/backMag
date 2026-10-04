@@ -2,7 +2,7 @@ import re
 
 from rest_framework import serializers
 
-from cars.models import Car, CarBrand, CarModel
+from cars.models import Car, CarBrand, CarModel, CarOwnership
 
 
 class CarBrandSerializer(serializers.ModelSerializer):
@@ -106,4 +106,75 @@ class CarSerializer(serializers.ModelSerializer):
                 archived_car.save()
                 return archived_car
 
-        return Car.objects.create(owner=owner, **validated_data)
+        return Car.objects.create(owner=owner, **validated_data)    @transaction.atomic
+    def create(self, validated_data):
+        owner = self.context['request'].user
+        vin = validated_data.get('vin')
+
+        if not vin:
+            car = Car.objects.create(owner=owner, **validated_data)
+            CarOwnership.objects.create(car=car, owner=owner)
+            return car
+
+        car = (
+            Car.objects
+            .select_for_update()
+            .select_related('model')
+            .filter(vin=vin)
+            .first()
+        )
+
+        if car is None:
+            car = Car.objects.create(owner=owner, **validated_data)
+            CarOwnership.objects.create(car=car, owner=owner)
+            return car
+
+        if (
+            validated_data['brand'].id != car.brand_id
+            or validated_data['model'].id != car.model_id
+            or validated_data['year'] != car.year
+        ):
+            raise serializers.ValidationError({
+                'vin': 'Основные данные автомобиля не совпадают с данными, сохранёнными для этого VIN.'
+            })
+
+        if car.owner_id == owner.id:
+            if not car.is_archived:
+                raise serializers.ValidationError({
+                    'vin': 'Автомобиль с таким VIN уже добавлен в ваш аккаунт.'
+                })
+
+            for field, value in validated_data.items():
+                setattr(car, field, value)
+
+            car.is_archived = False
+            car.save()
+            return car
+
+        if not car.is_archived:
+            raise serializers.ValidationError({
+                'vin': 'Автомобиль с таким VIN уже зарегистрирован.'
+            })
+
+        from django.utils import timezone
+
+        current_ownership = (
+            car.ownership_history
+            .select_for_update()
+            .filter(ended_at__isnull=True)
+            .first()
+        )
+
+        if current_ownership is not None:
+            current_ownership.ended_at = timezone.now()
+            current_ownership.save(update_fields=('ended_at',))
+
+        for field, value in validated_data.items():
+            setattr(car, field, value)
+
+        car.owner = owner
+        car.is_archived = False
+        car.save()
+        CarOwnership.objects.create(car=car, owner=owner)
+
+        return car
