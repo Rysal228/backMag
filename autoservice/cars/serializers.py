@@ -76,3 +76,34 @@ class CarSerializer(serializers.ModelSerializer):
             )
 
         return value
+
+    def create(self, validated_data):
+        request = self.context['request']
+        owner = request.user
+        vin = validated_data.get('vin')
+
+        if vin:
+            archived_car = (
+                Car.objects
+                .filter(owner=owner, vin=vin, is_archived=True)
+                .select_related('model')
+                .first()
+            )
+
+            if archived_car:
+                if (
+                    validated_data['brand'].id != archived_car.brand_id
+                    or validated_data['model'].id != archived_car.model_id
+                ):
+                    raise serializers.ValidationError({
+                        'vin': 'Автомобиль с таким VIN уже существует в вашей истории, но марка или модель не совпадает.'
+                    })
+
+                for field, value in validated_data.items():
+                    setattr(archived_car, field, value)
+
+                archived_car.is_archived = False
+                archived_car.save()
+                return archived_car
+
+        return Car.objects.create(owner=owner, **validated_data)
