@@ -267,12 +267,12 @@ class MaxAuthService:
     ) -> None:
         current_max_id = user.messenger_user_id
 
-        if current_max_id is not None and current_max_id != messenger_user_id:
+        if current_max_id and current_max_id != messenger_user_id:
             raise MaxAccountConflict()
 
         update_fields = []
 
-        if current_max_id is None:
+        if not current_max_id:
             user.messenger_user_id = messenger_user_id
             update_fields.append('messenger_user_id')
 
