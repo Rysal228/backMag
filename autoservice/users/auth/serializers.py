@@ -1,8 +1,18 @@
 import re
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
+
+User = get_user_model()
+
+
+class MaxSessionInvalid(AuthenticationFailed):
+    default_code = 'max_session_invalid'
+    default_detail = 'MAX-сессия больше не действительна.'
 
 
 def validate_phone(value: str) -> str:
@@ -81,9 +91,36 @@ class PasswordSerializer(serializers.Serializer):
 
 class RefreshTokenSerializer(TokenRefreshSerializer):
     def validate(self, attrs):
+        try:
+            refresh_token = RefreshToken(attrs['refresh'])
+        except TokenError:
+            refresh_token = None
+
+        if refresh_token is not None and refresh_token.get('auth_method') == 'max':
+            self._validate_max_binding(refresh_token)
+
         data = super().validate(attrs)
 
         return {
             'accessToken': data['access'],
             'refreshToken': data.get('refresh'),
         }
+
+    @staticmethod
+    def _validate_max_binding(refresh_token: RefreshToken) -> None:
+        user_id = refresh_token.get('user_id')
+        messenger_user_id = refresh_token.get('messenger_user_id')
+        max_verified_phone = refresh_token.get('max_verified_phone')
+
+        if not user_id or not messenger_user_id or not max_verified_phone:
+            raise MaxSessionInvalid()
+
+        user = User.objects.filter(pk=user_id).first()
+
+        if (
+            user is None
+            or not user.is_active
+            or user.messenger_user_id != messenger_user_id
+            or user.phone != max_verified_phone
+        ):
+            raise MaxSessionInvalid()

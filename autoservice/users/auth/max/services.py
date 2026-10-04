@@ -13,7 +13,7 @@ from rest_framework.exceptions import (
 
 from ...models import MaxAuthCode
 from ..services import PhoneNormalizer
-from ..tokens import create_auth_tokens
+from ..tokens import create_max_auth_tokens
 from .client import MaxBotApiError, MaxBotClient
 from .validators import (
     MaxContactValidator,
@@ -50,29 +50,61 @@ class MaxAuthService:
     def authenticate(
         *,
         init_data: str,
-        phone: str,
-        phone_auth_date: str,
-        phone_hash: str,
+        phone: str | None = None,
+        phone_auth_date: str | None = None,
+        phone_hash: str | None = None,
+        force_contact: bool = False,
     ) -> dict[str, str]:
         max_data = MaxInitDataValidator.validate(init_data)
+        max_user_id = str(max_data.user_id)
+
+        max_user = (
+            User.objects
+            .select_for_update()
+            .filter(messenger_user_id=max_user_id)
+            .first()
+        )
+
+        # Existing MAX account: no phone permission is needed again.
+        if max_user is not None:
+            if not max_user.is_active:
+                raise AuthenticationFailed('User is inactive.')
+
+            if phone is None and not force_contact:
+                return create_max_auth_tokens(
+                    max_user,
+                    messenger_user_id=max_user_id,
+                    max_verified_phone=max_user.phone,
+                )
+
+            if phone is None:
+                return {'status': 'contact_required'}
+
+            normalized_phone = PhoneNormalizer.normalize(phone)
+            MaxContactValidator.validate(
+                phone=normalized_phone,
+                auth_date=phone_auth_date,
+                received_hash=phone_hash,
+                user_id=max_data.user_id,
+            )
+            if max_user.phone != normalized_phone:
+                raise MaxAccountConflict()
+            return create_max_auth_tokens(
+                max_user,
+                messenger_user_id=max_user_id,
+                max_verified_phone=max_user.phone,
+            )
+
+        if phone is None:
+            return {'status': 'contact_required'}
 
         phone = PhoneNormalizer.normalize(phone)
-
         MaxContactValidator.validate(
             phone=phone,
             auth_date=phone_auth_date,
             received_hash=phone_hash,
             user_id=max_data.user_id,
         )
-
-        max_user_id = str(max_data.user_id)
-
-        max_user = User.objects.select_for_update().filter(
-            messenger_user_id=max_user_id,
-        ).first()
-
-        if max_user is not None and max_user.phone != phone:
-            raise MaxAccountConflict()
 
         user = (
             User.objects
@@ -99,11 +131,13 @@ class MaxAuthService:
             )
 
         if not user.is_active:
-            raise AuthenticationFailed(
-                'User is inactive.',
-            )
+            raise AuthenticationFailed('User is inactive.')
 
-        return create_auth_tokens(user)
+        return create_max_auth_tokens(
+            user,
+            messenger_user_id=max_user_id,
+            max_verified_phone=user.phone,
+        )
 
     @staticmethod
     @transaction.atomic
@@ -218,7 +252,11 @@ class MaxAuthService:
         auth_code.used_at = timezone.now()
         auth_code.save(update_fields=['used_at'])
 
-        return create_auth_tokens(user)
+        return create_max_auth_tokens(
+            user,
+            messenger_user_id=user.messenger_user_id,
+            max_verified_phone=user.phone,
+        )
 
     @staticmethod
     def _create_user(
@@ -249,12 +287,12 @@ class MaxAuthService:
     ) -> None:
         current_max_id = user.messenger_user_id
 
-        if current_max_id is not None and current_max_id != messenger_user_id:
+        if current_max_id and current_max_id != messenger_user_id:
             raise MaxAccountConflict()
 
         update_fields = []
 
-        if current_max_id is None:
+        if not current_max_id:
             user.messenger_user_id = messenger_user_id
             update_fields.append('messenger_user_id')
 
