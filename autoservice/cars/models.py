@@ -48,9 +48,9 @@ class Car(models.Model):
         verbose_name_plural = 'Автомобили'
         constraints = [
             models.UniqueConstraint(
-                fields=('owner', 'vin'),
                 condition=Q(vin__isnull=False),
-                name='unique_car_owner_vin',
+                fields=('vin',),
+                name='unique_car_vin',
             ),
         ]
 
@@ -119,3 +119,42 @@ class Car(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class CarOwnership(models.Model):
+
+    class Meta:
+        verbose_name = 'История владения автомобилем'
+        verbose_name_plural = 'История владения автомобилями'
+        ordering = ('-started_at',)
+        constraints = [
+            models.UniqueConstraint(
+                condition=Q(ended_at__isnull=True),
+                fields=('car',),
+                name='unique_current_car_ownership',
+            ),
+        ]
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    car = models.ForeignKey(
+        Car,
+        on_delete=models.CASCADE,
+        related_name='ownership_history',
+    )
+
+    owner = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name='car_ownerships',
+    )
+
+    started_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f'{self.car} — {self.owner}'
