@@ -59,8 +59,8 @@ class WorkStatus(models.Model):
     appearance = models.CharField(
         verbose_name='Внешний вид статуса',
         max_length=20,
-        choices=StatusAppearance.choices,
         default=StatusAppearance.WARNING,
+        choices=StatusAppearance.choices,
     )
 
     def __str__(self):
@@ -166,18 +166,16 @@ class BusySlot(models.Model):
     class Meta:
         verbose_name = 'Занятое время'
         verbose_name_plural = 'Занятое время'
-        ordering = ('date', 'start_time')
 
     date = models.DateField(verbose_name='Дата')
-    start_time = models.TimeField(verbose_name='Начало занятого времени')
-    end_time = models.TimeField(verbose_name='Конец занятого времени')
+    start_time = models.TimeField(verbose_name='Начало занятого интервала')
+    end_time = models.TimeField(verbose_name='Конец занятого интервала')
     order = models.OneToOneField(
         'Order',
         on_delete=models.CASCADE,
         related_name='busy_slot',
         null=True,
         blank=True,
-        verbose_name='Заказ',
     )
 
     def clean(self):
@@ -233,6 +231,11 @@ class Order(models.Model):
     order_number = models.CharField(max_length=50, unique=True)
     customer = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='orders')
     car = models.ForeignKey(Car, on_delete=models.PROTECT, related_name='orders')
+    car_brand_snapshot = models.CharField(max_length=100)
+    car_model_snapshot = models.CharField(max_length=100)
+    car_year_snapshot = models.PositiveIntegerField()
+    car_vin_snapshot = models.CharField(max_length=64, null=True, blank=True)
+    car_plate_number_snapshot = models.CharField(max_length=20, null=True, blank=True)
     work_type = models.ForeignKey(WorkType, on_delete=models.PROTECT)
     status = models.ForeignKey(OrderStatus, on_delete=models.PROTECT)
     work_status = models.ForeignKey(WorkStatus, on_delete=models.PROTECT, null=True, blank=True)
