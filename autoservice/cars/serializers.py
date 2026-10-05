@@ -35,6 +35,13 @@ class CarSerializer(serializers.ModelSerializer):
         source='model.name',
         read_only=True,
     )
+    vin = serializers.CharField(
+        max_length=64,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        validators=[],
+    )
 
     class Meta:
         model = Car
