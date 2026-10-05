@@ -59,8 +59,8 @@ class WorkStatus(models.Model):
     appearance = models.CharField(
         verbose_name='Внешний вид статуса',
         max_length=20,
-        default=StatusAppearance.WARNING,
         choices=StatusAppearance.choices,
+        default=StatusAppearance.WARNING,
     )
 
     def __str__(self):
