@@ -1,10 +1,10 @@
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
 from cars.models import Car, CarBrand, CarModel
 from cars.serializers import CarSerializer, CarBrandSerializer, CarModelSerializer
+from orders.pagination import OrderPagination
 from orders.serializers import OrderSerializer
 
 
@@ -26,10 +26,6 @@ class CarModelViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(brand_id=brand_id)
 
         return queryset
-
-
-class CarOrderPagination(PageNumberPagination):
-    page_size = 5
 
 
 class CarViewSet(viewsets.ModelViewSet):
@@ -54,7 +50,7 @@ class CarViewSet(viewsets.ModelViewSet):
             .order_by('-created_at')
         )
 
-        paginator = CarOrderPagination()
+        paginator = OrderPagination()
         page = paginator.paginate_queryset(orders, request, view=self)
         serializer = OrderSerializer(page, many=True, context={'request': request})
 
