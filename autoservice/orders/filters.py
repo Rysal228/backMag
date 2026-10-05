@@ -1,7 +1,8 @@
 import django_filters
 from django.db.models import Q
 
-from orders.models import Order
+from orders.models import Order, OrderFilterKey
+from orders.permissions import get_allowed_filter_keys
 
 
 class OrderFilter(django_filters.FilterSet):
@@ -33,16 +34,28 @@ class OrderFilter(django_filters.FilterSet):
             'date_to',
         )
 
-    @staticmethod
-    def filter_search(queryset, name, value):
-        return queryset.filter(
-            Q(order_number__icontains=value)
-            | Q(car_vin_snapshot__icontains=value)
-            | Q(car_plate_number_snapshot__icontains=value)
-            | Q(car_brand_snapshot__icontains=value)
-            | Q(car_model_snapshot__icontains=value)
-            | Q(customer__phone__icontains=value)
-            | Q(customer__first_name__icontains=value)
-            | Q(customer__last_name__icontains=value)
-            | Q(description__icontains=value)
-        ).distinct()
+    def filter_search(self, queryset, name, value):
+        allowed = get_allowed_filter_keys(self.request.user)
+        search_query = Q(
+            car_brand_snapshot__icontains=value,
+        ) | Q(
+            car_model_snapshot__icontains=value,
+        ) | Q(
+            description__icontains=value,
+        )
+
+        if OrderFilterKey.ORDER_NUMBER in allowed:
+            search_query |= Q(order_number__icontains=value)
+
+        if OrderFilterKey.VIN in allowed:
+            search_query |= Q(car_vin_snapshot__icontains=value)
+
+        if OrderFilterKey.PLATE_NUMBER in allowed:
+            search_query |= Q(car_plate_number_snapshot__icontains=value)
+
+        if self.request.user.role in ('mechanic', 'admin'):
+            search_query |= Q(customer__phone__icontains=value)
+            search_query |= Q(customer__first_name__icontains=value)
+            search_query |= Q(customer__last_name__icontains=value)
+
+        return queryset.filter(search_query).distinct()
