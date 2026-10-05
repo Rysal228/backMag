@@ -5,6 +5,7 @@ from orders.models import (
     AppointmentSettings,
     BusySlot,
     Order,
+    OrderFilterPermission,
     OrderStatus,
     ScheduleBlock,
     WeekdaySchedule,
@@ -13,6 +14,15 @@ from orders.models import (
 )
 from orders.services.appointment_availability import AppointmentAvailabilityService
 
+
+
+@admin.register(OrderFilterPermission)
+class OrderFilterPermissionAdmin(admin.ModelAdmin):
+    list_display = ('role', 'filter_key', 'enabled')
+    list_filter = ('role', 'filter_key', 'enabled')
+    list_editable = ('enabled',)
+    search_fields = ('role', 'filter_key')
+    ordering = ('role', 'filter_key')
 
 
 @admin.register(WorkType)
