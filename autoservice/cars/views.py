@@ -1,9 +1,12 @@
 from rest_framework import permissions, viewsets
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.decorators import action
 
 from cars.models import Car, CarBrand, CarModel
 from cars.serializers import CarSerializer, CarBrandSerializer, CarModelSerializer
+from orders.filters import OrderFilter
 from orders.pagination import OrderPagination
+from orders.permissions import validate_filter_permissions
 from orders.serializers import OrderSerializer
 
 
@@ -42,12 +45,15 @@ class CarViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def orders(self, request, pk=None):
         car = self.get_object()
+        validate_filter_permissions(request)
+
         orders = (
             car.orders
             .select_related('car__brand', 'car__model', 'work_type', 'status', 'work_status')
             .filter(customer=request.user)
             .order_by('-created_at')
         )
+        orders = OrderFilter(request.query_params, queryset=orders).qs
 
         paginator = OrderPagination()
         page = paginator.paginate_queryset(orders, request, view=self)
