@@ -35,6 +35,7 @@ class CarSerializer(serializers.ModelSerializer):
         source='model.name',
         read_only=True,
     )
+    hasOrders = serializers.SerializerMethodField()
     vin = serializers.CharField(
         max_length=64,
         required=False,
@@ -55,12 +56,17 @@ class CarSerializer(serializers.ModelSerializer):
             'vin',
             'plate_number',
             'photo',
+            'hasOrders',
         ]
         read_only_fields = [
             'id',
             'brandName',
             'modelName',
+            'hasOrders',
         ]
+
+    def get_hasOrders(self, obj):
+        return obj.orders.exists()
 
     def validate(self, attrs):
         brand = attrs.get('brand', getattr(self.instance, 'brand', None))
@@ -71,7 +77,34 @@ class CarSerializer(serializers.ModelSerializer):
                 'model': 'Выбранная модель не относится к указанной марке.'
             })
 
+        if self.instance and self.instance.orders.exists():
+            protected_fields = ('brand', 'model', 'year', 'vin')
+
+            changed_fields = [
+                field
+                for field in protected_fields
+                if field in attrs and not self._same_value(
+                    field,
+                    getattr(self.instance, field),
+                    attrs[field],
+                )
+            ]
+
+            if changed_fields:
+                raise serializers.ValidationError({
+                    field: 'Это поле нельзя изменять, потому что у автомобиля уже есть заказы.'
+                    for field in changed_fields
+                })
+
         return attrs
+
+    @staticmethod
+    def _same_value(field, current, new):
+        if field == 'vin':
+            current = (current or '').strip().upper()
+            new = (new or '').strip().upper()
+
+        return current == new
 
     def validate_vin(self, value):
         if not value:
