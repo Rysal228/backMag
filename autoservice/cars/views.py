@@ -52,9 +52,6 @@ class CarViewSet(viewsets.ModelViewSet):
         serializer = OrderSerializer(orders, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
-
     def perform_destroy(self, instance):
         instance.is_archived = True
         instance.save(update_fields=['is_archived'])
