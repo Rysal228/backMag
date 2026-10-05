@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 
 from cars.models import Car
@@ -186,4 +187,5 @@ class OrderSerializer(serializers.ModelSerializer):
     @staticmethod
     def _generate_order_number():
         import uuid
-        return uuid.uuid4().hex[:8]
+
+        return f'ORD-{timezone.localdate():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}'
