@@ -41,6 +41,8 @@ class OrderFilter(django_filters.FilterSet):
         ) | Q(
             car_model_snapshot__icontains=value,
         ) | Q(
+            work_type__name__icontains=value,
+        ) | Q(
             description__icontains=value,
         )
 
