@@ -52,7 +52,7 @@ class CarViewSet(viewsets.ModelViewSet):
             .filter(customer=request.user)
             .order_by('-created_at')
         )
-        orders = OrderFilter(request.query_params, queryset=orders).qs
+        orders = OrderFilter(request.query_params, queryset=orders, request=request).qs
 
         paginator = OrderPagination()
         page = paginator.paginate_queryset(orders, request, view=self)
