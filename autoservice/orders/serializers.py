@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 
 from cars.models import Car
@@ -114,7 +115,9 @@ class AppointmentAvailabilitySerializer(serializers.Serializer):
 class OrderSerializer(serializers.ModelSerializer):
     orderNumber = serializers.CharField(source='order_number', read_only=True)
     carName = serializers.SerializerMethodField()
-    carPlateNumber = serializers.CharField(source='car.plate_number', read_only=True, allow_null=True)
+    carYear = serializers.IntegerField(source='car_year_snapshot', read_only=True)
+    carVin = serializers.CharField(source='car_vin_snapshot', read_only=True, allow_null=True)
+    carPlateNumber = serializers.CharField(source='car_plate_number_snapshot', read_only=True, allow_null=True)
     workType = serializers.PrimaryKeyRelatedField(source='work_type', queryset=WorkType.objects.all())
     workTypeName = serializers.CharField(source='work_type.name', read_only=True)
     status = OrderStatusInlineSerializer(read_only=True)
@@ -125,16 +128,19 @@ class OrderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Order
-        fields = ('id', 'orderNumber', 'car', 'carName', 'carPlateNumber', 'workType', 'workTypeName', 'status', 'workStatus', 'appointmentAt', 'description', 'price', 'createdAt')
-        read_only_fields = ('id', 'orderNumber', 'carName', 'carPlateNumber', 'workTypeName', 'status', 'workStatus', 'price', 'createdAt')
+        fields = ('id', 'orderNumber', 'car', 'carName', 'carYear', 'carVin', 'carPlateNumber', 'workType', 'workTypeName', 'status', 'workStatus', 'appointmentAt', 'description', 'price', 'createdAt')
+        read_only_fields = ('id', 'orderNumber', 'carName', 'carYear', 'carVin', 'carPlateNumber', 'workTypeName', 'status', 'workStatus', 'price', 'createdAt')
 
     def get_carName(self, obj):
-        return f'{obj.car.brand.name} {obj.car.model.name}'
+        return f'{obj.car_brand_snapshot} {obj.car_model_snapshot}'
 
     def validate_car(self, value: Car):
         request = self.context.get('request')
-        if request and value.owner_id != request.user.id:
-            raise serializers.ValidationError('Выбранный автомобиль вам не принадлежит.')
+        if request and (
+            value.owner_id != request.user.id
+            or value.is_archived
+        ):
+            raise serializers.ValidationError('Выбранный автомобиль недоступен для создания заказа.')
         return value
 
     def validate_appointmentAt(self, value):
@@ -153,10 +159,16 @@ class OrderSerializer(serializers.ModelSerializer):
         if status is None:
             raise serializers.ValidationError({'status': 'Начальный статус заказа не настроен в системе.'})
 
+        car = validated_data['car']
         order = Order.objects.create(
             order_number=self._generate_order_number(),
             customer=request.user,
             status=status,
+            car_brand_snapshot=car.brand.name,
+            car_model_snapshot=car.model.name,
+            car_year_snapshot=car.year,
+            car_vin_snapshot=car.vin,
+            car_plate_number_snapshot=car.plate_number,
             **validated_data,
         )
         AppointmentAvailabilityService.sync_order_busy_slot(order)
@@ -175,4 +187,5 @@ class OrderSerializer(serializers.ModelSerializer):
     @staticmethod
     def _generate_order_number():
         import uuid
-        return uuid.uuid4().hex[:8]
+
+        return f'ORD-{timezone.localdate():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}'

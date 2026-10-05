@@ -2,8 +2,10 @@ import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 
 from users.models import CustomUser
+
 
 class CarBrand(models.Model):
 
@@ -23,7 +25,7 @@ class CarBrand(models.Model):
 class CarModel(models.Model):
 
     class Meta:
-        verbose_name = 'Модель автомобиля'
+        verbose_name = 'Модели автомобилей'
         verbose_name_plural = 'Модели автомобилей'
         unique_together = ('brand', 'name')
 
@@ -44,6 +46,13 @@ class Car(models.Model):
     class Meta:
         verbose_name = 'Автомобиль'
         verbose_name_plural = 'Автомобили'
+        constraints = [
+            models.UniqueConstraint(
+                condition=Q(vin__isnull=False) & ~Q(vin=''),
+                fields=('vin',),
+                name='unique_car_vin',
+            ),
+        ]
 
     id = models.UUIDField(
         primary_key=True,
@@ -56,7 +65,6 @@ class Car(models.Model):
         on_delete=models.CASCADE,
         related_name='cars',
     )
-
 
     brand = models.ForeignKey(
         CarBrand,
@@ -74,7 +82,6 @@ class Car(models.Model):
 
     vin = models.CharField(
         max_length=64,
-        unique=True,
         null=True,
         blank=True,
     )
@@ -89,6 +96,11 @@ class Car(models.Model):
         upload_to='cars/',
         null=True,
         blank=True,
+    )
+
+    is_archived = models.BooleanField(
+        default=False,
+        verbose_name='Архивный',
     )
 
     def __str__(self):
@@ -107,3 +119,42 @@ class Car(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class CarOwnership(models.Model):
+
+    class Meta:
+        verbose_name = 'История владения автомобилем'
+        verbose_name_plural = 'История владения автомобилями'
+        ordering = ('-started_at',)
+        constraints = [
+            models.UniqueConstraint(
+                condition=Q(ended_at__isnull=True),
+                fields=('car',),
+                name='unique_current_car_ownership',
+            ),
+        ]
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    car = models.ForeignKey(
+        Car,
+        on_delete=models.CASCADE,
+        related_name='ownership_history',
+    )
+
+    owner = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name='car_ownerships',
+    )
+
+    started_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f'{self.car} — {self.owner}'
