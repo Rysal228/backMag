@@ -1,9 +1,10 @@
 from collections.abc import Mapping, Sequence
 
+import logging
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
 
-
+logger = logging.getLogger(__name__)
 DEFAULT_MESSAGE = 'Произошла ошибка при выполнении запроса.'
 VALIDATION_MESSAGE = 'Проверьте корректность введённых данных.'
 SERVER_ERROR_MESSAGE = 'Произошла внутренняя ошибка сервера.'
@@ -23,6 +24,21 @@ def api_exception_handler(exc, context):
     response = drf_exception_handler(exc, context)
 
     if response is None:
+        logger.exception(
+            'Unhandled API exception',
+            extra={
+                'view': context.get('view').__class__.__name__
+                if context.get('view')
+                else None,
+                'request_method': context.get('request').method
+                if context.get('request')
+                else None,
+                'request_path': context.get('request').path
+                if context.get('request')
+                else None,
+            },
+        )
+
         return Response(
             {
                 'code': 'internal_server_error',
