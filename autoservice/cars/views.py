@@ -1,6 +1,5 @@
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
 from cars.models import Car, CarBrand, CarModel
@@ -28,10 +27,6 @@ class CarModelViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset
 
 
-class CarOrderPagination(PageNumberPagination):
-    page_size = 5
-
-
 class CarViewSet(viewsets.ModelViewSet):
     serializer_class = CarSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -54,11 +49,8 @@ class CarViewSet(viewsets.ModelViewSet):
             .order_by('-created_at')
         )
 
-        paginator = CarOrderPagination()
-        page = paginator.paginate_queryset(orders, request, view=self)
-        serializer = OrderSerializer(page, many=True, context={'request': request})
-
-        return paginator.get_paginated_response(serializer.data)
+        serializer = OrderSerializer(orders, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def perform_destroy(self, instance):
         instance.is_archived = True
