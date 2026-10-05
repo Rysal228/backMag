@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from orders.models import AppointmentSettings, Order, ScheduleBlock, WeekdaySchedule, OrderStatus, WorkStatus, WorkType
+from orders.pagination import OrderPagination
 from orders.serializers import (
     AppointmentAvailabilitySerializer,
     AppointmentScheduleSerializer,
@@ -62,6 +63,7 @@ class AppointmentAvailabilityView(APIView):
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = OrderPagination
 
     def get_queryset(self):
         return (
