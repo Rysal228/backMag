@@ -1,6 +1,5 @@
-from rest_framework import permissions, status, viewsets
+from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
 
 from cars.models import Car, CarBrand, CarModel
 from cars.serializers import CarSerializer, CarBrandSerializer, CarModelSerializer
