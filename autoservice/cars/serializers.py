@@ -120,6 +120,9 @@ class CarSerializer(serializers.ModelSerializer):
                 'VIN должен содержать 17 символов: латинские буквы и цифры, без I, O и Q.'
             )
 
+        if self.instance and Car.objects.filter(vin=value).exclude(pk=self.instance.pk).exists():
+            raise serializers.ValidationError('Автомобиль с таким VIN уже зарегистрирован.')
+
         return value
 
     @transaction.atomic
