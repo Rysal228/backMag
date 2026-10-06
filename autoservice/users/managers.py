@@ -38,6 +38,10 @@ class CustomUserManager(BaseUserManager):
 
         from .models import UserRole, UserRoleAssignment
 
+        UserRoleAssignment.objects.filter(
+            user=user,
+            role=UserRole.USER,
+        ).delete()
         UserRoleAssignment.objects.get_or_create(
             user=user,
             role=UserRole.ADMIN,
