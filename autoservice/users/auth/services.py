@@ -3,14 +3,16 @@ from django.contrib.auth.hashers import check_password
 from django.contrib.auth.password_validation import validate_password
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 
-from .tokens import create_auth_tokens
+from .role_selection import RoleSelectionService
+from .tokens import create_auth_tokens, create_max_auth_tokens
+from users.roles import get_user_roles, resolve_active_role
 
 User = get_user_model()
 
 
 class AuthService:
     @staticmethod
-    def login(*, phone: str, password: str) -> dict[str, str]:
+    def login(*, phone: str, password: str, role: str | None = None) -> dict[str, str]:
         phone = PhoneNormalizer.normalize(phone)
 
         user = authenticate(
@@ -28,7 +30,36 @@ class AuthService:
                 'Пользователь деактивирован.'
             )
 
-        return create_auth_tokens(user)
+        roles = get_user_roles(user)
+
+        if role is not None:
+            return create_auth_tokens(user, active_role=role)
+
+        if len(roles) == 1:
+            return create_auth_tokens(user, active_role=roles[0])
+
+        return {
+            'status': 'role_selection_required',
+            'roles': roles,
+            'selectionToken': RoleSelectionService.create_token(
+                user=user,
+                auth_method='password',
+            ),
+        }
+
+    @staticmethod
+    def switch_role(*, user, role: str, token=None) -> dict[str, str]:
+        active_role = resolve_active_role(user, role)
+
+        if token is not None and token.get('auth_method') == 'max':
+            return create_max_auth_tokens(
+                user,
+                messenger_user_id=token.get('messenger_user_id', ''),
+                max_verified_phone=token.get('max_verified_phone', ''),
+                active_role=active_role,
+            )
+
+        return create_auth_tokens(user, active_role=active_role)
 
     @staticmethod
     def register(

@@ -34,14 +34,14 @@ class CustomUserViewSet(viewsets.ReadOnlyModelViewSet):
                 'role': 'Invalid user role.',
             })
 
-        return queryset.filter(role=role)
+        return queryset.filter(role_assignments__role=role).distinct()
 
 
 class ProfileCustomUserView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        serializer = ProfileCustomUserSerializer(request.user)
+        serializer = ProfileCustomUserSerializer(request.user, context={'request': request})
 
         return Response({
             'user': serializer.data,
@@ -52,6 +52,7 @@ class ProfileCustomUserView(APIView):
             request.user,
             data=request.data,
             partial=True,
+            context={'request': request},
         )
 
         serializer.is_valid(raise_exception=True)

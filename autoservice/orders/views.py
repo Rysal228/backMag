@@ -80,7 +80,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             'work_status',
         )
 
-        if self.request.user.role in ('mechanic', 'admin'):
+        if self.request.active_role in ('mechanic', 'admin'):
             return queryset.order_by('-created_at')
 
         return queryset.filter(customer=self.request.user).order_by('-created_at')
@@ -94,7 +94,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         permissions_map = {key: False for key, _ in OrderFilterKey.choices}
 
         for filter_permission in OrderFilterPermission.objects.filter(
-            role=request.user.role,
+            role=request.active_role,
             enabled=True,
         ):
             permissions_map[filter_permission.filter_key] = True

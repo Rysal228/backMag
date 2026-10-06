@@ -3,11 +3,13 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .role_selection_views import RoleSelectionView
 from .serializers import (
     LoginSerializer,
     PasswordSerializer,
     RefreshTokenSerializer,
     RegisterSerializer,
+    RoleSerializer,
 )
 from .services import AuthService
 
@@ -27,12 +29,33 @@ class LoginView(APIView):
         tokens = AuthService.login(
             phone=serializer.validated_data['phone'],
             password=serializer.validated_data['password'],
+            role=serializer.validated_data.get('role'),
         )
 
         return Response(
             tokens,
             status=status.HTTP_200_OK,
         )
+
+
+class RoleSelectionEndpointView(RoleSelectionView):
+    pass
+
+
+class SwitchRoleView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = RoleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        tokens = AuthService.switch_role(
+            user=request.user,
+            role=serializer.validated_data['role'],
+            token=request.auth,
+        )
+
+        return Response(tokens, status=status.HTTP_200_OK)
 
 
 class RegisterView(APIView):

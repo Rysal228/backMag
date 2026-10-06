@@ -12,6 +12,8 @@ from rest_framework.exceptions import (
 )
 
 from ...models import MaxAuthCode
+from users.roles import get_user_roles
+from ..role_selection import RoleSelectionService
 from ..services import PhoneNormalizer
 from ..tokens import create_max_auth_tokens
 from .client import MaxBotApiError, MaxBotClient
@@ -46,6 +48,43 @@ class MaxCodeDeliveryError(APIException):
 class MaxAuthService:
 
     @staticmethod
+    def _create_tokens_or_selection(
+        *,
+        user,
+        role: str | None,
+        messenger_user_id: str,
+    ) -> dict:
+        roles = get_user_roles(user)
+
+        if role is not None:
+            return create_max_auth_tokens(
+                user,
+                messenger_user_id=messenger_user_id,
+                max_verified_phone=user.phone,
+                active_role=role,
+            )
+
+        if len(roles) == 1:
+            return create_max_auth_tokens(
+                user,
+                messenger_user_id=messenger_user_id,
+                max_verified_phone=user.phone,
+                active_role=roles[0],
+            )
+
+        return {
+            'status': 'role_selection_required',
+            'roles': roles,
+            'selectionToken': RoleSelectionService.create_token(
+                user=user,
+                auth_method='max',
+                messenger_user_id=messenger_user_id,
+                max_verified_phone=user.phone,
+            ),
+        }
+
+
+    @staticmethod
     @transaction.atomic
     def authenticate(
         *,
@@ -54,6 +93,7 @@ class MaxAuthService:
         phone_auth_date: str | None = None,
         phone_hash: str | None = None,
         force_contact: bool = False,
+        role: str | None = None,
     ) -> dict[str, str]:
         max_data = MaxInitDataValidator.validate(init_data)
         max_user_id = str(max_data.user_id)
@@ -71,10 +111,10 @@ class MaxAuthService:
                 raise AuthenticationFailed('User is inactive.')
 
             if phone is None and not force_contact:
-                return create_max_auth_tokens(
-                    max_user,
+                return MaxAuthService._create_tokens_or_selection(
+                    user=max_user,
+                    role=role,
                     messenger_user_id=max_user_id,
-                    max_verified_phone=max_user.phone,
                 )
 
             if phone is None:
@@ -89,10 +129,10 @@ class MaxAuthService:
             )
             if max_user.phone != normalized_phone:
                 raise MaxAccountConflict()
-            return create_max_auth_tokens(
-                max_user,
+            return MaxAuthService._create_tokens_or_selection(
+                user=max_user,
+                role=role,
                 messenger_user_id=max_user_id,
-                max_verified_phone=max_user.phone,
             )
 
         if phone is None:
@@ -133,10 +173,10 @@ class MaxAuthService:
         if not user.is_active:
             raise AuthenticationFailed('User is inactive.')
 
-        return create_max_auth_tokens(
-            user,
+        return MaxAuthService._create_tokens_or_selection(
+            user=user,
+            role=role,
             messenger_user_id=max_user_id,
-            max_verified_phone=user.phone,
         )
 
     @staticmethod
@@ -199,7 +239,7 @@ class MaxAuthService:
 
     @staticmethod
     @transaction.atomic
-    def verify_code(*, phone: str, code: str) -> dict[str, str]:
+    def verify_code(*, phone: str, code: str, role: str | None = None) -> dict[str, str]:
         phone = PhoneNormalizer.normalize(phone)
         user = (
             User.objects
@@ -252,10 +292,10 @@ class MaxAuthService:
         auth_code.used_at = timezone.now()
         auth_code.save(update_fields=['used_at'])
 
-        return create_max_auth_tokens(
-            user,
+        return MaxAuthService._create_tokens_or_selection(
+            user=user,
+            role=role,
             messenger_user_id=user.messenger_user_id,
-            max_verified_phone=user.phone,
         )
 
     @staticmethod

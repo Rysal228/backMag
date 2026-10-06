@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from .models import UserRole
+
 
 class CustomUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
@@ -42,6 +44,7 @@ class CustomUserSerializer(serializers.ModelSerializer):
         user = super().create(validated_data)
         user.set_password(password)
         user.save()
+        user.role_assignments.get_or_create(role=UserRole.USER)
 
         return user
 
@@ -74,6 +77,8 @@ class ProfileCustomUserSerializer(serializers.ModelSerializer):
         required=False,
         allow_blank=True,
     )
+    roles = serializers.SerializerMethodField()
+    activeRole = serializers.SerializerMethodField()
 
     class Meta:
         model = get_user_model()
@@ -84,10 +89,19 @@ class ProfileCustomUserSerializer(serializers.ModelSerializer):
             'lastName',
             'patronymic',
             'birthday',
-            'role',
+            'roles',
+            'activeRole',
         ]
         read_only_fields = [
             'id',
             'phone',
-            'role',
+            'roles',
+            'activeRole',
         ]
+
+    def get_roles(self, obj):
+        return obj.get_roles()
+
+    def get_activeRole(self, obj):
+        request = self.context.get('request')
+        return getattr(request, 'active_role', None)
