@@ -32,7 +32,6 @@ class CustomUserCreationForm(PhoneNormalizationMixin, UserCreationForm):
             'first_name',
             'patronymic',
             'birthday',
-            'role',
         )
 
 
@@ -45,5 +44,4 @@ class CustomUserChangeForm(PhoneNormalizationMixin, UserChangeForm):
             'first_name',
             'patronymic',
             'birthday',
-            'role',
         )
