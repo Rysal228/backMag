@@ -3,7 +3,7 @@ from django.contrib.auth.hashers import check_password
 from django.contrib.auth.password_validation import validate_password
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 
-from .tokens import create_auth_tokens
+from .tokens import create_auth_tokens, create_max_auth_tokens
 from users.roles import resolve_active_role
 
 User = get_user_model()
@@ -32,8 +32,17 @@ class AuthService:
         return create_auth_tokens(user, active_role=role)
 
     @staticmethod
-    def switch_role(*, user, role: str) -> dict[str, str]:
+    def switch_role(*, user, role: str, token=None) -> dict[str, str]:
         active_role = resolve_active_role(user, role)
+
+        if token is not None and token.get('auth_method') == 'max':
+            return create_max_auth_tokens(
+                user,
+                messenger_user_id=token.get('messenger_user_id', ''),
+                max_verified_phone=token.get('max_verified_phone', ''),
+                active_role=active_role,
+            )
+
         return create_auth_tokens(user, active_role=active_role)
 
     @staticmethod
