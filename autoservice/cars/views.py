@@ -1,7 +1,9 @@
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from cars.models import Car, CarBrand, CarModel
+from cars.pagination import CarPagination
 from cars.serializers import CarSerializer, CarBrandSerializer, CarModelSerializer
 from orders.filters import OrderFilter
 from orders.pagination import OrderPagination
@@ -32,14 +34,73 @@ class CarModelViewSet(viewsets.ReadOnlyModelViewSet):
 class CarViewSet(viewsets.ModelViewSet):
     serializer_class = CarSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = CarPagination
 
     def get_queryset(self):
         return (
             Car.objects
             .filter(owner=self.request.user, is_archived=False)
             .select_related('brand', 'model')
-            .order_by('brand__name', 'model__name')
+            .order_by('brand__name', 'model__name', 'id')
         )
+
+    @action(detail=True, methods=['get'])
+    def navigation(self, request, pk=None):
+        cars = self.get_queryset()
+        current_car = self.get_object()
+
+        previous_car = (
+            cars
+            .filter(brand__name__lt=current_car.brand.name)
+            .order_by('-brand__name', '-model__name', '-id')
+            .first()
+        ) or (
+            cars
+            .filter(
+                brand__name=current_car.brand.name,
+                model__name__lt=current_car.model.name,
+            )
+            .order_by('-model__name', '-id')
+            .first()
+        ) or (
+            cars
+            .filter(
+                brand__name=current_car.brand.name,
+                model__name=current_car.model.name,
+                id__lt=current_car.id,
+            )
+            .order_by('-id')
+            .first()
+        )
+
+        next_car = (
+            cars
+            .filter(brand__name__gt=current_car.brand.name)
+            .order_by('brand__name', 'model__name', 'id')
+            .first()
+        ) or (
+            cars
+            .filter(
+                brand__name=current_car.brand.name,
+                model__name__gt=current_car.model.name,
+            )
+            .order_by('model__name', 'id')
+            .first()
+        ) or (
+            cars
+            .filter(
+                brand__name=current_car.brand.name,
+                model__name=current_car.model.name,
+                id__gt=current_car.id,
+            )
+            .order_by('id')
+            .first()
+        )
+
+        return Response({
+            'previous': CarSerializer(previous_car, context={'request': request}).data if previous_car else None,
+            'next': CarSerializer(next_car, context={'request': request}).data if next_car else None,
+        })
 
     @action(detail=True, methods=['get'])
     def orders(self, request, pk=None):
