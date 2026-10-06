@@ -6,12 +6,14 @@ from .views import (
     RefreshTokenView,
     PasswordView,
     SwitchRoleView,
+    RoleSelectionEndpointView,
 )
 
 urlpatterns = [
     path('login/', LoginView.as_view()),
     path('register/', RegisterView.as_view()),
     path('switch-role/', SwitchRoleView.as_view()),
+    path('select-role/', RoleSelectionEndpointView.as_view()),
     path('password/', PasswordView.as_view()),
     path('max/', include('users.auth.max.urls')),
     path('token/refresh/', RefreshTokenView.as_view()),
