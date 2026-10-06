@@ -3,8 +3,9 @@ from django.contrib.auth.hashers import check_password
 from django.contrib.auth.password_validation import validate_password
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 
+from .role_selection import RoleSelectionService
 from .tokens import create_auth_tokens, create_max_auth_tokens
-from users.roles import resolve_active_role
+from users.roles import get_user_roles, resolve_active_role
 
 User = get_user_model()
 
@@ -29,7 +30,22 @@ class AuthService:
                 'Пользователь деактивирован.'
             )
 
-        return create_auth_tokens(user, active_role=role)
+        roles = get_user_roles(user)
+
+        if role is not None:
+            return create_auth_tokens(user, active_role=role)
+
+        if len(roles) == 1:
+            return create_auth_tokens(user, active_role=roles[0])
+
+        return {
+            'status': 'role_selection_required',
+            'roles': roles,
+            'selectionToken': RoleSelectionService.create_token(
+                user=user,
+                auth_method='password',
+            ),
+        }
 
     @staticmethod
     def switch_role(*, user, role: str, token=None) -> dict[str, str]:
