@@ -1,6 +1,16 @@
 from rest_framework.exceptions import ValidationError
 
-from .models import UserRole
+
+class RoleSelectionRequired(ValidationError):
+    default_detail = 'Необходимо выбрать роль.'
+    default_code = 'role_selection_required'
+
+    def __init__(self, roles):
+        super().__init__({
+            'code': self.default_code,
+            'message': self.default_detail,
+            'availableRoles': roles,
+        })
 
 
 def get_user_roles(user) -> list[str]:
@@ -28,10 +38,4 @@ def resolve_active_role(user, role: str | None = None) -> str:
     if len(roles) == 1:
         return roles[0]
 
-    raise ValidationError({
-        'code': 'role_selection_required',
-        'message': 'Необходимо выбрать роль.',
-        'details': {
-            'availableRoles': roles,
-        },
-    })
+    raise RoleSelectionRequired(roles)
