@@ -7,6 +7,7 @@ class MaxAuthSerializer(serializers.Serializer):
         write_only=True,
     )
     phone = serializers.CharField(max_length=20, required=False)
+    role = serializers.CharField(required=False, allow_blank=False)
     forceContact = serializers.BooleanField(
         source='force_contact',
         required=False,
@@ -41,3 +42,4 @@ class MaxCodeRequestSerializer(serializers.Serializer):
 class MaxCodeVerifySerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=20)
     code = serializers.CharField(min_length=6, max_length=6)
+    role = serializers.CharField(required=False, allow_blank=False)
