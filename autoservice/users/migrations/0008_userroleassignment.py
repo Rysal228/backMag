@@ -1,4 +1,5 @@
 from django.db import migrations, models
+import django.db.models.deletion
 
 
 def copy_legacy_roles(apps, schema_editor):
@@ -52,7 +53,7 @@ class Migration(migrations.Migration):
                 (
                     'user',
                     models.ForeignKey(
-                        on_delete=models.deletion.CASCADE,
+                        on_delete=django.db.models.deletion.CASCADE,
                         related_name='role_assignments',
                         to='users.customuser',
                     ),
