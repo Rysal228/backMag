@@ -8,6 +8,7 @@ from .serializers import (
     PasswordSerializer,
     RefreshTokenSerializer,
     RegisterSerializer,
+    RoleSerializer,
 )
 from .services import AuthService
 
@@ -34,6 +35,21 @@ class LoginView(APIView):
             tokens,
             status=status.HTTP_200_OK,
         )
+
+
+class SwitchRoleView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = RoleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        tokens = AuthService.switch_role(
+            user=request.user,
+            role=serializer.validated_data['role'],
+        )
+
+        return Response(tokens, status=status.HTTP_200_OK)
 
 
 class RegisterView(APIView):
