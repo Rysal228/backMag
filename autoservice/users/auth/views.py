@@ -27,6 +27,7 @@ class LoginView(APIView):
         tokens = AuthService.login(
             phone=serializer.validated_data['phone'],
             password=serializer.validated_data['password'],
+            role=serializer.validated_data.get('role'),
         )
 
         return Response(
