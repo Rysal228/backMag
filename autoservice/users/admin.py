@@ -2,7 +2,14 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
 from .forms import CustomUserCreationForm, CustomUserChangeForm
-from .models import CustomUser
+from .models import CustomUser, UserRoleAssignment
+
+
+class UserRoleAssignmentInline(admin.TabularInline):
+    model = UserRoleAssignment
+    extra = 1
+    min_num = 1
+    fields = ('role',)
 
 
 @admin.register(CustomUser)
@@ -10,13 +17,14 @@ class CustomUserAdmin(UserAdmin):
     add_form = CustomUserCreationForm
     form = CustomUserChangeForm
     model = CustomUser
+    inlines = (UserRoleAssignmentInline,)
 
     list_display = (
         'phone',
         'last_name',
         'first_name',
         'patronymic',
-        'role',
+        'display_roles',
     )
 
     search_fields = (
@@ -27,7 +35,7 @@ class CustomUserAdmin(UserAdmin):
     )
 
     list_filter = (
-        'role',
+        'role_assignments__role',
         'is_active',
     )
 
@@ -50,11 +58,6 @@ class CustomUserAdmin(UserAdmin):
                 'patronymic',
                 'birthday',
                 'messenger_user_id',
-            ),
-        }),
-        ('Role', {
-            'fields': (
-                'role',
             ),
         }),
         ('Permissions', {
@@ -82,7 +85,6 @@ class CustomUserAdmin(UserAdmin):
                 'first_name',
                 'patronymic',
                 'birthday',
-                'role',
                 'password1',
                 'password2',
                 'is_staff',
@@ -90,3 +92,9 @@ class CustomUserAdmin(UserAdmin):
             ),
         }),
     )
+
+    @admin.display(description='Роли')
+    def display_roles(self, obj):
+        return ', '.join(
+            obj.role_assignments.values_list('role', flat=True)
+        )
