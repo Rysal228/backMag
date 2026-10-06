@@ -54,6 +54,7 @@ class MaxAuthService:
         phone_auth_date: str | None = None,
         phone_hash: str | None = None,
         force_contact: bool = False,
+        role: str | None = None,
     ) -> dict[str, str]:
         max_data = MaxInitDataValidator.validate(init_data)
         max_user_id = str(max_data.user_id)
@@ -75,6 +76,7 @@ class MaxAuthService:
                     max_user,
                     messenger_user_id=max_user_id,
                     max_verified_phone=max_user.phone,
+                    active_role=role,
                 )
 
             if phone is None:
@@ -93,6 +95,7 @@ class MaxAuthService:
                 max_user,
                 messenger_user_id=max_user_id,
                 max_verified_phone=max_user.phone,
+                active_role=role,
             )
 
         if phone is None:
@@ -137,6 +140,7 @@ class MaxAuthService:
             user,
             messenger_user_id=max_user_id,
             max_verified_phone=user.phone,
+            active_role=role,
         )
 
     @staticmethod
@@ -199,7 +203,7 @@ class MaxAuthService:
 
     @staticmethod
     @transaction.atomic
-    def verify_code(*, phone: str, code: str) -> dict[str, str]:
+    def verify_code(*, phone: str, code: str, role: str | None = None) -> dict[str, str]:
         phone = PhoneNormalizer.normalize(phone)
         user = (
             User.objects
@@ -256,6 +260,7 @@ class MaxAuthService:
             user,
             messenger_user_id=user.messenger_user_id,
             max_verified_phone=user.phone,
+            active_role=role,
         )
 
     @staticmethod
