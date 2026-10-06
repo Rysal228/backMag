@@ -35,6 +35,10 @@ class LoginSerializer(serializers.Serializer):
         return validate_phone(value)
 
 
+class RoleSerializer(serializers.Serializer):
+    role = serializers.CharField()
+
+
 class RegisterSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=20)
 
