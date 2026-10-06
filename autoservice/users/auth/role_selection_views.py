@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from rest_framework import status
+from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -28,7 +29,6 @@ class RoleSelectionView(APIView):
         ).first()
 
         if user is None:
-            from rest_framework.exceptions import AuthenticationFailed
             raise AuthenticationFailed(
                 'Пользователь больше не может войти в систему.'
             )
@@ -36,7 +36,6 @@ class RoleSelectionView(APIView):
         role = serializer.validated_data['role']
 
         if not user.has_role(role):
-            from rest_framework.exceptions import ValidationError
             raise ValidationError({
                 'role': 'Выбранная роль недоступна для этого пользователя.',
             })
@@ -46,7 +45,6 @@ class RoleSelectionView(APIView):
                 payload.get('messenger_user_id') != user.messenger_user_id
                 or payload.get('max_verified_phone') != user.phone
             ):
-                from rest_framework.exceptions import AuthenticationFailed
                 raise AuthenticationFailed(
                     'MAX-сессия больше не действительна.'
                 )
