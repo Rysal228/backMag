@@ -10,7 +10,7 @@ User = get_user_model()
 
 class AuthService:
     @staticmethod
-    def login(*, phone: str, password: str) -> dict[str, str]:
+    def login(*, phone: str, password: str, role: str | None = None) -> dict[str, str]:
         phone = PhoneNormalizer.normalize(phone)
 
         user = authenticate(
@@ -28,7 +28,7 @@ class AuthService:
                 'Пользователь деактивирован.'
             )
 
-        return create_auth_tokens(user)
+        return create_auth_tokens(user, active_role=role)
 
     @staticmethod
     def register(
