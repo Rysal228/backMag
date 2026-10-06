@@ -47,6 +47,7 @@ class SwitchRoleView(APIView):
         tokens = AuthService.switch_role(
             user=request.user,
             role=serializer.validated_data['role'],
+            token=request.auth,
         )
 
         return Response(tokens, status=status.HTTP_200_OK)
