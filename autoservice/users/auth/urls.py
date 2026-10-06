@@ -3,7 +3,9 @@ from django.urls import include, path
 from .views import (
     LoginView,
     RegisterView,
-    RefreshTokenView, PasswordView,
+    RefreshTokenView,
+    PasswordView,
+    SwitchRoleView,
 )
 
 urlpatterns = [
