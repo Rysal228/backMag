@@ -35,7 +35,7 @@ class NewsViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = NewsPagination
 
     def get_queryset(self):
-        role = self.request.user.role
+        role = self.request.active_role
         accessible_roles = ROLE_ACCESS.get(role, (role,))
 
         return (
