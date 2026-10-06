@@ -44,6 +44,7 @@ class CustomUserSerializer(serializers.ModelSerializer):
         user = super().create(validated_data)
         user.set_password(password)
         user.save()
+        user.role_assignments.get_or_create(role=UserRole.USER)
 
         return user
 
