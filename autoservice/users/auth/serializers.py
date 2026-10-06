@@ -29,6 +29,7 @@ def validate_phone(value: str) -> str:
 class LoginSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=20)
     password = serializers.CharField(write_only=True)
+    role = serializers.CharField(required=False, allow_blank=False)
 
     def validate_phone(self, value):
         return validate_phone(value)
@@ -96,6 +97,9 @@ class RefreshTokenSerializer(TokenRefreshSerializer):
         except TokenError:
             refresh_token = None
 
+        if refresh_token is not None:
+            self._validate_active_role(refresh_token)
+
         if refresh_token is not None and refresh_token.get('auth_method') == 'max':
             self._validate_max_binding(refresh_token)
 
@@ -105,6 +109,19 @@ class RefreshTokenSerializer(TokenRefreshSerializer):
             'accessToken': data['access'],
             'refreshToken': data.get('refresh'),
         }
+
+    @staticmethod
+    def _validate_active_role(refresh_token: RefreshToken) -> None:
+        user_id = refresh_token.get('user_id')
+        active_role = refresh_token.get('active_role')
+
+        if not user_id or not active_role:
+            raise MaxSessionInvalid()
+
+        user = User.objects.filter(pk=user_id, is_active=True).first()
+
+        if user is None or not user.has_role(active_role):
+            raise AuthenticationFailed('Активная роль больше не назначена пользователю.')
 
     @staticmethod
     def _validate_max_binding(refresh_token: RefreshToken) -> None:
