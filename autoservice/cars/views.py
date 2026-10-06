@@ -41,7 +41,7 @@ class CarViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Car.objects.filter(is_archived=False)
 
-        if self.request.user.role != UserRole.ADMIN:
+        if self.request.active_role != UserRole.ADMIN:
             queryset = queryset.filter(owner=self.request.user)
 
         return queryset.select_related('brand', 'model').order_by(
