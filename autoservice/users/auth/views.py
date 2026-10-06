@@ -3,6 +3,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .role_selection_views import RoleSelectionView
 from .serializers import (
     LoginSerializer,
     PasswordSerializer,
@@ -35,6 +36,10 @@ class LoginView(APIView):
             tokens,
             status=status.HTTP_200_OK,
         )
+
+
+class RoleSelectionEndpointView(RoleSelectionView):
+    pass
 
 
 class SwitchRoleView(APIView):
