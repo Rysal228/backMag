@@ -51,13 +51,6 @@ class CustomUser(AbstractUser):
         blank=True,
     )
 
-    role = models.CharField(
-        verbose_name='Роль',
-        max_length=20,
-        choices=UserRole.choices,
-        default=UserRole.USER,
-    )
-
     USERNAME_FIELD = 'phone'
     REQUIRED_FIELDS = []
 
@@ -73,6 +66,40 @@ class CustomUser(AbstractUser):
             )
             if part
         )
+
+    def get_roles(self) -> list[str]:
+        return list(
+            self.role_assignments.values_list('role', flat=True)
+        )
+
+    def has_role(self, role: str) -> bool:
+        return self.role_assignments.filter(role=role).exists()
+
+
+class UserRoleAssignment(models.Model):
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name='role_assignments',
+    )
+    role = models.CharField(
+        verbose_name='Роль',
+        max_length=20,
+        choices=UserRole.choices,
+    )
+
+    class Meta:
+        verbose_name = 'Роль пользователя'
+        verbose_name_plural = 'Роли пользователей'
+        constraints = [
+            models.UniqueConstraint(
+                fields=('user', 'role'),
+                name='unique_user_role',
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.user.phone}: {self.get_role_display()}'
 
 
 class MaxAuthCode(models.Model):
