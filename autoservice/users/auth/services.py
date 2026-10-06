@@ -4,6 +4,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 
 from .tokens import create_auth_tokens
+from users.roles import resolve_active_role
 
 User = get_user_model()
 
@@ -29,6 +30,11 @@ class AuthService:
             )
 
         return create_auth_tokens(user, active_role=role)
+
+    @staticmethod
+    def switch_role(*, user, role: str) -> dict[str, str]:
+        active_role = resolve_active_role(user, role)
+        return create_auth_tokens(user, active_role=active_role)
 
     @staticmethod
     def register(
