@@ -16,6 +16,13 @@ class CustomUserManager(BaseUserManager):
         user.set_password(password)
         user.save(using=self._db)
 
+        from .models import UserRole, UserRoleAssignment
+
+        UserRoleAssignment.objects.get_or_create(
+            user=user,
+            role=UserRole.USER,
+        )
+
         return user
 
     def create_superuser(self, phone, password=None, **extra_fields):
@@ -23,8 +30,17 @@ class CustomUserManager(BaseUserManager):
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
 
-        return self.create_user(
+        user = self.create_user(
             phone,
             password,
             **extra_fields,
         )
+
+        from .models import UserRole, UserRoleAssignment
+
+        UserRoleAssignment.objects.get_or_create(
+            user=user,
+            role=UserRole.ADMIN,
+        )
+
+        return user
