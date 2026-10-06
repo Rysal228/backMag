@@ -116,7 +116,7 @@ class RefreshTokenSerializer(TokenRefreshSerializer):
         active_role = refresh_token.get('active_role')
 
         if not user_id or not active_role:
-            raise MaxSessionInvalid()
+            raise AuthenticationFailed('Сессия устарела. Войдите в систему заново.')
 
         user = User.objects.filter(pk=user_id, is_active=True).first()
 
