@@ -18,17 +18,22 @@ QUERY_TO_FILTER = {
 }
 
 
-def get_allowed_filter_keys(user):
+def get_allowed_filter_keys(role):
     return set(
         OrderFilterPermission.objects.filter(
-            role=user.role,
+            role=role,
             enabled=True,
         ).values_list('filter_key', flat=True)
     )
 
 
 def validate_filter_permissions(request):
-    allowed = get_allowed_filter_keys(request.user)
+    role = getattr(request, 'active_role', None)
+
+    if role is None:
+        raise PermissionDenied('Активная роль не определена.')
+
+    allowed = get_allowed_filter_keys(role)
     denied = {
         query_key
         for query_key, filter_key in QUERY_TO_FILTER.items()
