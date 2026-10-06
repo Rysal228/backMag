@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -9,6 +10,7 @@ from orders.filters import OrderFilter
 from orders.pagination import OrderPagination
 from orders.permissions import validate_filter_permissions
 from orders.serializers import OrderSerializer
+from users.models import UserRole
 
 
 class CarBrandViewSet(viewsets.ReadOnlyModelViewSet):
@@ -37,11 +39,15 @@ class CarViewSet(viewsets.ModelViewSet):
     pagination_class = CarPagination
 
     def get_queryset(self):
-        return (
-            Car.objects
-            .filter(owner=self.request.user, is_archived=False)
-            .select_related('brand', 'model')
-            .order_by('brand__name', 'model__name', 'id')
+        queryset = Car.objects.filter(is_archived=False)
+
+        if self.request.user.role != UserRole.ADMIN:
+            queryset = queryset.filter(owner=self.request.user)
+
+        return queryset.select_related('brand', 'model').order_by(
+            'brand__name',
+            'model__name',
+            'id',
         )
 
     @action(detail=True, methods=['get'])
@@ -51,49 +57,37 @@ class CarViewSet(viewsets.ModelViewSet):
 
         previous_car = (
             cars
-            .filter(brand__name__lt=current_car.brand.name)
+            .filter(
+                Q(brand__name__lt=current_car.brand.name)
+                | Q(
+                    brand__name=current_car.brand.name,
+                    model__name__lt=current_car.model.name,
+                )
+                | Q(
+                    brand__name=current_car.brand.name,
+                    model__name=current_car.model.name,
+                    id__lt=current_car.id,
+                )
+            )
             .order_by('-brand__name', '-model__name', '-id')
-            .first()
-        ) or (
-            cars
-            .filter(
-                brand__name=current_car.brand.name,
-                model__name__lt=current_car.model.name,
-            )
-            .order_by('-model__name', '-id')
-            .first()
-        ) or (
-            cars
-            .filter(
-                brand__name=current_car.brand.name,
-                model__name=current_car.model.name,
-                id__lt=current_car.id,
-            )
-            .order_by('-id')
             .first()
         )
 
         next_car = (
             cars
-            .filter(brand__name__gt=current_car.brand.name)
+            .filter(
+                Q(brand__name__gt=current_car.brand.name)
+                | Q(
+                    brand__name=current_car.brand.name,
+                    model__name__gt=current_car.model.name,
+                )
+                | Q(
+                    brand__name=current_car.brand.name,
+                    model__name=current_car.model.name,
+                    id__gt=current_car.id,
+                )
+            )
             .order_by('brand__name', 'model__name', 'id')
-            .first()
-        ) or (
-            cars
-            .filter(
-                brand__name=current_car.brand.name,
-                model__name__gt=current_car.model.name,
-            )
-            .order_by('model__name', 'id')
-            .first()
-        ) or (
-            cars
-            .filter(
-                brand__name=current_car.brand.name,
-                model__name=current_car.model.name,
-                id__gt=current_car.id,
-            )
-            .order_by('id')
             .first()
         )
 
