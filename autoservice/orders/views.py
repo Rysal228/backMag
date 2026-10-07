@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import permissions, serializers, viewsets
 from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend
@@ -20,9 +21,17 @@ from orders.services.appointment_availability import AppointmentAvailabilityServ
 
 
 class WorkTypeViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = WorkType.objects.all().order_by('name')
     serializer_class = WorkTypeSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = WorkType.objects.all().order_by('name')
+        search = self.request.query_params.get('search', '').strip()
+
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+
+        return queryset
 
 
 class OrderStatusViewSet(viewsets.ReadOnlyModelViewSet):
@@ -79,7 +88,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             'work_type',
             'status',
             'work_status',
-        )
+        ).prefetch_related('work_types')
 
         if self.request.active_role in ('mechanic', 'admin'):
             return queryset.order_by('-created_at')
