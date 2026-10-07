@@ -134,79 +134,13 @@ class CarSerializer(serializers.ModelSerializer):
                 'VIN должен содержать 17 символов: латинские буквы и цифры, без I, O и Q.'
             )
 
-        if self.instance and Car.objects.filter(vin=value).exclude(pk=self.instance.pk).exists():
-            raise serializers.ValidationError('Автомобиль с таким VIN уже зарегистрирован.')
-
         return value
 
     @transaction.atomic
     def create(self, validated_data):
         owner = self.context['request'].user
-        vin = validated_data.get('vin')
-
-        if not vin:
-            car = Car.objects.create(owner=owner, **validated_data)
-            CarOwnership.objects.create(car=car, owner=owner)
-            return car
-
-        car = (
-            Car.objects
-            .select_for_update()
-            .select_related('model')
-            .filter(vin=vin)
-            .first()
-        )
-
-        if car is None:
-            car = Car.objects.create(owner=owner, **validated_data)
-            CarOwnership.objects.create(car=car, owner=owner)
-            return car
-
-        if car.owner_id == owner.id:
-            if not car.is_archived:
-                raise serializers.ValidationError({
-                    'vin': 'Автомобиль с таким VIN уже добавлен в ваш аккаунт.'
-                })
-
-            self._validate_identity_data(car, validated_data)
-
-            for field, value in validated_data.items():
-                setattr(car, field, value)
-
-            car.is_archived = False
-            car.save()
-            return car
-
-        if not car.is_archived:
-            raise serializers.ValidationError({
-                'vin': 'Автомобиль с таким VIN уже зарегистрирован.'
-            })
-
-        self._validate_identity_data(car, validated_data)
-
-        current_ownership = (
-            car.ownership_history
-            .select_for_update()
-            .filter(ended_at__isnull=True)
-            .first()
-        )
-
-        if current_ownership is not None:
-            current_ownership.ended_at = timezone.now()
-            current_ownership.save(update_fields=('ended_at',))
-
-        for field, value in validated_data.items():
-            setattr(car, field, value)
-
-        car.owner = owner
-        car.is_archived = False
-        car.save()
-
-        CarOwnership.objects.create(
-            car=car,
-            owner=owner,
-        )
-
+        car = Car.objects.create(owner=owner, **validated_data)
+        CarOwnership.objects.create(car=car, owner=owner)
         return car
 
     @staticmethod
