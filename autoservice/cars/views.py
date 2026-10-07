@@ -12,6 +12,7 @@ from orders.filters import OrderFilter
 from orders.pagination import OrderPagination
 from orders.permissions import validate_filter_permissions
 from orders.serializers import OrderSerializer
+from users.auth.services import PhoneNormalizer
 from users.models import UserRole
 
 
@@ -63,7 +64,8 @@ class CarViewSet(viewsets.ModelViewSet):
         if active_role in {UserRole.MECHANIC, UserRole.ADMIN}:
             owner_phone = self.request.query_params.get('owner_phone')
             if owner_phone:
-                queryset = queryset.filter(owner__phone__icontains=owner_phone.strip())
+                owner_phone = PhoneNormalizer.normalize(owner_phone)
+                queryset = queryset.filter(owner__phone__icontains=owner_phone)
 
         brand_id = self.request.query_params.get('brand')
         if brand_id:
