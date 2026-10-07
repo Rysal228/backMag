@@ -12,7 +12,7 @@ class OrderFilter(django_filters.FilterSet):
     plate_number = django_filters.CharFilter(field_name='car_plate_number_snapshot', lookup_expr='icontains')
     brand = django_filters.NumberFilter(field_name='car__brand_id')
     model = django_filters.NumberFilter(field_name='car__model_id')
-    work_type = django_filters.NumberFilter(field_name='work_type_id')
+    work_type = django_filters.NumberFilter(field_name='work_types__id')
     status = django_filters.NumberFilter(field_name='status_id')
     work_status = django_filters.NumberFilter(field_name='work_status_id')
     date_from = django_filters.DateFilter(field_name='appointment_at', lookup_expr='date__gte')
@@ -41,7 +41,7 @@ class OrderFilter(django_filters.FilterSet):
         ) | Q(
             car_model_snapshot__icontains=value,
         ) | Q(
-            work_type__name__icontains=value,
+            work_types__name__icontains=value,
         ) | Q(
             description__icontains=value,
         )
