@@ -188,4 +188,4 @@ class OrderSerializer(serializers.ModelSerializer):
     def _generate_order_number():
         import uuid
 
-        return f'ORD-{timezone.localdate():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}'
+        return uuid.uuid4().hex[:6].upper()
