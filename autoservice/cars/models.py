@@ -46,13 +46,6 @@ class Car(models.Model):
     class Meta:
         verbose_name = 'Автомобиль'
         verbose_name_plural = 'Автомобили'
-        constraints = [
-            models.UniqueConstraint(
-                condition=Q(vin__isnull=False) & ~Q(vin=''),
-                fields=('vin',),
-                name='unique_car_vin',
-            ),
-        ]
 
     id = models.UUIDField(
         primary_key=True,
