@@ -112,6 +112,36 @@ class AppointmentAvailabilitySerializer(serializers.Serializer):
     blockedSlots = TimeIntervalSerializer(source='blocked_slots', many=True)
 
 
+class WorkTypesField(serializers.ListField):
+    def __init__(self, **kwargs):
+        super().__init__(
+            child=serializers.CharField(max_length=100, allow_blank=False),
+            allow_empty=False,
+            **kwargs,
+        )
+
+    def to_internal_value(self, data):
+        values = super().to_internal_value(data)
+        normalized = []
+        seen = set()
+
+        for value in values:
+            name = ' '.join(value.split())
+            key = name.casefold()
+
+            if key and key not in seen:
+                normalized.append(name)
+                seen.add(key)
+
+        if not normalized:
+            raise serializers.ValidationError('Необходимо указать хотя бы один тип работ.')
+
+        return normalized
+
+    def to_representation(self, value):
+        return [work_type.name for work_type in value.all().order_by('name')]
+
+
 class OrderSerializer(serializers.ModelSerializer):
     orderNumber = serializers.CharField(source='order_number', read_only=True)
     carName = serializers.SerializerMethodField()
@@ -119,8 +149,7 @@ class OrderSerializer(serializers.ModelSerializer):
     carYear = serializers.IntegerField(source='car_year_snapshot', read_only=True)
     carVin = serializers.CharField(source='car_vin_snapshot', read_only=True, allow_null=True)
     carPlateNumber = serializers.CharField(source='car_plate_number_snapshot', read_only=True, allow_null=True)
-    workType = serializers.PrimaryKeyRelatedField(source='work_type', queryset=WorkType.objects.all())
-    workTypeName = serializers.CharField(source='work_type.name', read_only=True)
+    workTypes = WorkTypesField(source='work_types')
     status = OrderStatusInlineSerializer(read_only=True)
     workStatus = WorkStatusInlineSerializer(source='work_status', read_only=True, allow_null=True)
     appointmentAt = serializers.DateTimeField(source='appointment_at')
@@ -129,8 +158,36 @@ class OrderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Order
-        fields = ('id', 'orderNumber', 'car', 'carName', 'ownerPhone', 'carYear', 'carVin', 'carPlateNumber', 'workType', 'workTypeName', 'status', 'workStatus', 'appointmentAt', 'description', 'price', 'createdAt')
-        read_only_fields = ('id', 'orderNumber', 'carName', 'ownerPhone', 'carYear', 'carVin', 'carPlateNumber', 'workTypeName', 'status', 'workStatus', 'price', 'createdAt')
+        fields = (
+            'id',
+            'orderNumber',
+            'car',
+            'carName',
+            'ownerPhone',
+            'carYear',
+            'carVin',
+            'carPlateNumber',
+            'workTypes',
+            'status',
+            'workStatus',
+            'appointmentAt',
+            'description',
+            'price',
+            'createdAt',
+        )
+        read_only_fields = (
+            'id',
+            'orderNumber',
+            'carName',
+            'ownerPhone',
+            'carYear',
+            'carVin',
+            'carPlateNumber',
+            'status',
+            'workStatus',
+            'price',
+            'createdAt',
+        )
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -164,6 +221,19 @@ class OrderSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Выбранное время недоступно для записи.')
         return value
 
+    def _resolve_work_types(self, names):
+        work_types = []
+
+        for name in names:
+            work_type = WorkType.objects.filter(name__iexact=name).first()
+
+            if work_type is None:
+                work_type = WorkType.objects.create(name=name)
+
+            work_types.append(work_type)
+
+        return work_types
+
     @transaction.atomic
     def create(self, validated_data):
         request = self.context['request']
@@ -172,11 +242,15 @@ class OrderSerializer(serializers.ModelSerializer):
         if status is None:
             raise serializers.ValidationError({'status': 'Начальный статус заказа не настроен в системе.'})
 
+        work_type_names = validated_data.pop('work_types')
+        work_types = self._resolve_work_types(work_type_names)
         car = validated_data['car']
+
         order = Order.objects.create(
             order_number=self._generate_order_number(),
             customer=request.user,
             status=status,
+            work_type=work_types[0],
             car_brand_snapshot=car.brand.name,
             car_model_snapshot=car.model.name,
             car_year_snapshot=car.year,
@@ -184,13 +258,22 @@ class OrderSerializer(serializers.ModelSerializer):
             car_plate_number_snapshot=car.plate_number,
             **validated_data,
         )
+        order.work_types.set(work_types)
         AppointmentAvailabilityService.sync_order_busy_slot(order)
+
         return order
 
     @transaction.atomic
     def update(self, instance, validated_data):
         appointment_changed = 'appointment_at' in validated_data
+        work_type_names = validated_data.pop('work_types', None)
         order = super().update(instance, validated_data)
+
+        if work_type_names is not None:
+            work_types = self._resolve_work_types(work_type_names)
+            order.work_types.set(work_types)
+            order.work_type = work_types[0]
+            order.save(update_fields=('work_type',))
 
         if appointment_changed:
             AppointmentAvailabilityService.sync_order_busy_slot(order)
