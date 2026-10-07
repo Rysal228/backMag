@@ -272,6 +272,14 @@ class Order(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     order_number = models.CharField(max_length=50, unique=True)
     customer = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='orders')
+    mechanic = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        related_name='assigned_orders',
+        null=True,
+        blank=True,
+        verbose_name='Специалист',
+    )
     car = models.ForeignKey(Car, on_delete=models.PROTECT, related_name='orders')
     car_brand_snapshot = models.CharField(max_length=100)
     car_model_snapshot = models.CharField(max_length=100)
@@ -285,6 +293,14 @@ class Order(models.Model):
     description = models.TextField(blank=True)
     price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def clean(self):
+        super().clean()
+
+        if self.mechanic_id and not self.mechanic.has_role(UserRole.MECHANIC):
+            raise ValidationError({
+                'mechanic': 'Назначенный специалист должен иметь роль механика.'
+            })
 
     def save(self, *args, **kwargs):
         self.full_clean()
