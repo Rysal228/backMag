@@ -138,7 +138,44 @@ class CarSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         owner = self.context['request'].user
+        vin = validated_data.get('vin')
+
+        if vin:
+            archived_car = (
+                Car.objects
+                .select_for_update()
+                .filter(
+                    owner=owner,
+                    vin=vin,
+                    is_archived=True,
+                )
+                .select_related('brand', 'model')
+                .order_by('-ownership_history__started_at')
+                .first()
+            )
+
+            if archived_car is not None:
+                self._validate_identity_data(archived_car, validated_data)
+
+                for field, value in validated_data.items():
+                    setattr(archived_car, field, value)
+
+                archived_car.is_archived = False
+                archived_car.save()
+                return archived_car
+
         car = Car.objects.create(owner=owner, **validated_data)
         CarOwnership.objects.create(car=car, owner=owner)
         return car
+
+    @staticmethod
+    def _validate_identity_data(car, validated_data):
+        if (
+            validated_data['brand'].id != car.brand_id
+            or validated_data['model'].id != car.model_id
+            or validated_data['year'] != car.year
+        ):
+            raise serializers.ValidationError({
+                'vin': 'Основные данные автомобиля не совпадают с данными, сохранёнными для этого VIN.'
+            })
 
