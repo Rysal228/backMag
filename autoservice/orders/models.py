@@ -287,7 +287,7 @@ class Order(models.Model):
     car_vin_snapshot = models.CharField(max_length=64, null=True, blank=True)
     car_plate_number_snapshot = models.CharField(max_length=20, null=True, blank=True)
     work_type = models.ForeignKey(WorkType, on_delete=models.PROTECT, null=True, blank=True)
-    work_types = models.ManyToManyField(WorkType, related_name='orders', blank=True)
+    work_types = models.ManyToManyField(WorkType, related_name='orders')
     status = models.ForeignKey(OrderStatus, on_delete=models.PROTECT)
     work_status = models.ForeignKey(WorkStatus, on_delete=models.PROTECT, null=True, blank=True)
     appointment_at = models.DateTimeField(null=True, blank=True)
