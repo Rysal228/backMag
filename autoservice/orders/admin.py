@@ -1,3 +1,4 @@
+from users.models import CustomUser, UserRole
 from django.contrib import admin
 from django.db import transaction
 
@@ -80,9 +81,19 @@ class BusySlotAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('order_number', 'customer', 'car', 'work_type', 'status', 'work_status', 'appointment_at', 'price')
-    list_filter = ('status', 'work_status', 'work_type')
-    search_fields = ('order_number', 'customer__phone', 'car__plate_number')
+    list_display = ('order_number', 'customer', 'car', 'mechanic', 'work_type', 'status', 'work_status', 'appointment_at', 'price')
+    list_filter = ('status', 'work_status', 'work_type', 'mechanic')
+    search_fields = (
+        'order_number', 'customer__phone', 'car__plate_number',
+        'mechanic__phone', 'mechanic__last_name', 'mechanic__first_name',
+    )
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'mechanic':
+            kwargs['queryset'] = CustomUser.objects.filter(
+                role_assignments__role=UserRole.MECHANIC,
+            ).distinct()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @transaction.atomic
     def save_model(self, request, obj, form, change):
