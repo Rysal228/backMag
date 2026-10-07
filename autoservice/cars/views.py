@@ -43,6 +43,8 @@ class CarViewSet(viewsets.ModelViewSet):
 
         if self.request.active_role == UserRole.USER:
             queryset = queryset.filter(owner=self.request.user)
+        elif self.request.active_role == UserRole.MECHANIC:
+            queryset = queryset.filter(orders__mechanic=self.request.user).distinct()
 
         return queryset.select_related('owner', 'brand', 'model').order_by(
             'brand__name',
