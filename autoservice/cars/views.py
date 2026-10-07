@@ -40,12 +40,15 @@ class CarViewSet(viewsets.ModelViewSet):
     pagination_class = CarPagination
 
     def get_queryset(self):
-        queryset = Car.objects.filter(is_archived=False)
+        queryset = Car.objects.all()
 
         if self.request.active_role == UserRole.USER:
-            queryset = queryset.filter(owner=self.request.user)
+            queryset = queryset.filter(owner=self.request.user, is_archived=False)
         elif self.request.active_role == UserRole.MECHANIC:
-            queryset = queryset.filter(orders__mechanic=self.request.user).distinct()
+            queryset = queryset.filter(
+                orders__mechanic=self.request.user,
+                is_archived=False,
+            ).distinct()
 
         return queryset.select_related('owner', 'brand', 'model').order_by(
             'brand__name',
