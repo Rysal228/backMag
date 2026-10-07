@@ -1,7 +1,6 @@
 import re
 
 from django.db import transaction
-from django.utils import timezone
 from rest_framework import serializers
 
 from cars.models import Car, CarBrand, CarModel, CarOwnership
@@ -142,15 +141,4 @@ class CarSerializer(serializers.ModelSerializer):
         car = Car.objects.create(owner=owner, **validated_data)
         CarOwnership.objects.create(car=car, owner=owner)
         return car
-
-    @staticmethod
-    def _validate_identity_data(car, validated_data):
-        if (
-            validated_data['brand'].id != car.brand_id
-            or validated_data['model'].id != car.model_id
-            or validated_data['year'] != car.year
-        ):
-            raise serializers.ValidationError({
-                'vin': 'Основные данные автомобиля не совпадают с данными, сохранёнными для этого VIN.'
-            })
 
