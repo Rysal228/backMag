@@ -1,6 +1,7 @@
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from rest_framework import permissions, viewsets
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -41,14 +42,51 @@ class CarViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Car.objects.all()
+        active_role = self.request.active_role
+        status = self.request.query_params.get('status')
 
-        if self.request.active_role == UserRole.USER:
-            queryset = queryset.filter(owner=self.request.user, is_archived=False)
-        elif self.request.active_role == UserRole.MECHANIC:
+        if active_role == UserRole.USER:
+            queryset = queryset.filter(owner=self.request.user)
+        elif active_role == UserRole.MECHANIC:
             queryset = queryset.filter(
                 orders__mechanic=self.request.user,
-                is_archived=False,
             ).distinct()
+
+        if status not in {'active', 'archived', 'all'}:
+            status = 'active' if active_role in {UserRole.USER, UserRole.MECHANIC} else 'all'
+
+        if status == 'active':
+            queryset = queryset.filter(is_archived=False)
+        elif status == 'archived':
+            queryset = queryset.filter(is_archived=True)
+
+        if active_role in {UserRole.MECHANIC, UserRole.ADMIN}:
+            owner_phone = self.request.query_params.get('owner_phone')
+            if owner_phone:
+                queryset = queryset.filter(owner__phone__icontains=owner_phone.strip())
+
+        brand_id = self.request.query_params.get('brand')
+        if brand_id:
+            queryset = queryset.filter(brand_id=brand_id)
+
+        model_id = self.request.query_params.get('model')
+        if model_id:
+            queryset = queryset.filter(model_id=model_id)
+
+        year = self.request.query_params.get('year')
+        if year:
+            try:
+                queryset = queryset.filter(year=int(year))
+            except ValueError:
+                pass
+
+        vin = self.request.query_params.get('vin')
+        if vin:
+            queryset = queryset.filter(vin__icontains=vin.strip())
+
+        plate_number = self.request.query_params.get('plate_number')
+        if plate_number:
+            queryset = queryset.filter(plate_number__icontains=plate_number.strip())
 
         return queryset.select_related('owner', 'brand', 'model').order_by(
             'brand__name',
@@ -120,6 +158,21 @@ class CarViewSet(viewsets.ModelViewSet):
         serializer = OrderSerializer(page, many=True, context={'request': request})
 
         return paginator.get_paginated_response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def restore(self, request, pk=None):
+        if request.active_role != UserRole.USER:
+            raise PermissionDenied('Только пользователь может восстанавливать автомобиль.')
+
+        car = get_object_or_404(Car, pk=pk, owner=request.user)
+
+        if not car.is_archived:
+            raise ValidationError({'detail': 'Автомобиль уже активен.'})
+
+        car.is_archived = False
+        car.save(update_fields=['is_archived'])
+
+        return Response(CarSerializer(car, context={'request': request}).data)
 
     def create(self, request, *args, **kwargs):
         if request.active_role != UserRole.USER:
