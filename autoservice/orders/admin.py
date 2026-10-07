@@ -16,7 +16,6 @@ from orders.models import (
 from orders.services.appointment_availability import AppointmentAvailabilityService
 
 
-
 @admin.register(OrderFilterPermission)
 class OrderFilterPermissionAdmin(admin.ModelAdmin):
     list_display = ('role', 'filter_key', 'enabled')
@@ -81,18 +80,25 @@ class BusySlotAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('order_number', 'customer', 'car', 'mechanic', 'work_type', 'status', 'work_status', 'appointment_at', 'price')
-    list_filter = ('status', 'work_status', 'work_type', 'mechanic')
+    list_display = ('order_number', 'customer', 'car', 'mechanic', 'work_types_display', 'status', 'work_status', 'appointment_at', 'price')
+    list_filter = ('status', 'work_status', 'work_types', 'mechanic')
     search_fields = (
         'order_number', 'customer__phone', 'car__plate_number',
         'mechanic__phone', 'mechanic__last_name', 'mechanic__first_name',
     )
+    filter_horizontal = ('work_types',)
+    exclude = ('work_type',)
+
+    @admin.display(description='Типы работ')
+    def work_types_display(self, obj):
+        return ', '.join(obj.work_types.values_list('name', flat=True))
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'mechanic':
             kwargs['queryset'] = CustomUser.objects.filter(
                 role_assignments__role=UserRole.MECHANIC,
             ).distinct()
+
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @transaction.atomic
@@ -105,3 +111,11 @@ class OrderAdmin(admin.ModelAdmin):
 
         if not change or previous_appointment != obj.appointment_at:
             AppointmentAvailabilityService.sync_order_busy_slot(obj)
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+
+        work_type = form.instance.work_types.order_by('id').first()
+
+        if work_type is not None:
+            Order.objects.filter(pk=form.instance.pk).update(work_type=work_type)
