@@ -1,20 +1,15 @@
-from django.db import migrations, models
+from django.db import migrations
 
 
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('cars', '0004_car_ownership'),
+        ('cars', '0005_alter_carmodel_options'),
     ]
 
     operations = [
-        migrations.AlterField(
+        migrations.RemoveConstraint(
             model_name='car',
-            name='vin',
-            field=models.CharField(
-                blank=True,
-                max_length=64,
-                null=True,
-            ),
+            name='unique_car_vin',
         ),
     ]
