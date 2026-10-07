@@ -1,5 +1,6 @@
 from django.db.models import Q
 from rest_framework import permissions, viewsets
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -117,6 +118,33 @@ class CarViewSet(viewsets.ModelViewSet):
 
         return paginator.get_paginated_response(serializer.data)
 
+    def create(self, request, *args, **kwargs):
+        if request.active_role != UserRole.USER:
+            raise PermissionDenied('Только пользователь может добавлять автомобили.')
+
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        self._ensure_owner_can_manage()
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        self._ensure_owner_can_manage()
+        return super().partial_update(request, *args, **kwargs)
+
     def perform_destroy(self, instance):
+        self._ensure_owner_can_manage(instance)
         instance.is_archived = True
         instance.save(update_fields=['is_archived'])
+
+    def _ensure_owner_can_manage(self, instance=None):
+        if self.request.active_role != UserRole.USER:
+            raise PermissionDenied(
+                'Только владелец автомобиля может изменять или удалять его.'
+            )
+
+        instance = instance or self.get_object()
+        if instance.owner_id != self.request.user.id:
+            raise PermissionDenied(
+                'Только владелец автомобиля может изменять или удалять его.'
+            )
