@@ -31,6 +31,11 @@ class CarSerializer(serializers.ModelSerializer):
         source='brand.name',
         read_only=True,
     )
+    ownerName = serializers.SerializerMethodField()
+    ownerPhone = serializers.CharField(
+        source='owner.phone',
+        read_only=True,
+    )
     modelName = serializers.CharField(
         source='model.name',
         read_only=True,
@@ -52,6 +57,8 @@ class CarSerializer(serializers.ModelSerializer):
             'brandName',
             'model',
             'modelName',
+            'ownerName',
+            'ownerPhone',
             'year',
             'vin',
             'plate_number',
@@ -62,8 +69,13 @@ class CarSerializer(serializers.ModelSerializer):
             'id',
             'brandName',
             'modelName',
+            'ownerName',
+            'ownerPhone',
             'hasOrders',
         ]
+
+    def get_ownerName(self, obj):
+        return obj.owner.get_full_name() or obj.owner.phone
 
     def get_hasOrders(self, obj):
         return obj.orders.exists()
@@ -205,3 +217,4 @@ class CarSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'vin': 'Основные данные автомобиля не совпадают с данными, сохранёнными для этого VIN.'
             })
+
