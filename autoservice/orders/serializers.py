@@ -115,6 +115,7 @@ class AppointmentAvailabilitySerializer(serializers.Serializer):
 class OrderSerializer(serializers.ModelSerializer):
     orderNumber = serializers.CharField(source='order_number', read_only=True)
     carName = serializers.SerializerMethodField()
+    ownerPhone = serializers.SerializerMethodField()
     carYear = serializers.IntegerField(source='car_year_snapshot', read_only=True)
     carVin = serializers.CharField(source='car_vin_snapshot', read_only=True, allow_null=True)
     carPlateNumber = serializers.CharField(source='car_plate_number_snapshot', read_only=True, allow_null=True)
@@ -128,11 +129,23 @@ class OrderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Order
-        fields = ('id', 'orderNumber', 'car', 'carName', 'carYear', 'carVin', 'carPlateNumber', 'workType', 'workTypeName', 'status', 'workStatus', 'appointmentAt', 'description', 'price', 'createdAt')
-        read_only_fields = ('id', 'orderNumber', 'carName', 'carYear', 'carVin', 'carPlateNumber', 'workTypeName', 'status', 'workStatus', 'price', 'createdAt')
+        fields = ('id', 'orderNumber', 'car', 'carName', 'ownerPhone', 'carYear', 'carVin', 'carPlateNumber', 'workType', 'workTypeName', 'status', 'workStatus', 'appointmentAt', 'description', 'price', 'createdAt')
+        read_only_fields = ('id', 'orderNumber', 'carName', 'ownerPhone', 'carYear', 'carVin', 'carPlateNumber', 'workTypeName', 'status', 'workStatus', 'price', 'createdAt')
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+
+        if not request or request.active_role not in ('mechanic', 'admin'):
+            data.pop('ownerPhone', None)
+
+        return data
 
     def get_carName(self, obj):
         return f'{obj.car_brand_snapshot} {obj.car_model_snapshot}'
+
+    def get_ownerPhone(self, obj):
+        return obj.customer.phone
 
     def validate_car(self, value: Car):
         request = self.context.get('request')
