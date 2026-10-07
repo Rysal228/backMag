@@ -142,7 +142,11 @@ class CarViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def orders(self, request, pk=None):
-        car = self.get_object()
+        if request.active_role == UserRole.USER:
+            car = get_object_or_404(Car, pk=pk, owner=request.user)
+        else:
+            car = self.get_object()
+
         validate_filter_permissions(request)
 
         orders = (
