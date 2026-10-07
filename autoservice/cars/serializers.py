@@ -41,6 +41,7 @@ class CarSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     hasOrders = serializers.SerializerMethodField()
+    status = serializers.CharField(read_only=True)
     vin = serializers.CharField(
         max_length=64,
         required=False,
@@ -64,6 +65,7 @@ class CarSerializer(serializers.ModelSerializer):
             'plate_number',
             'photo',
             'hasOrders',
+            'status',
         ]
         read_only_fields = [
             'id',
