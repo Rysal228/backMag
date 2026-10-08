@@ -413,7 +413,6 @@ class Order(models.Model):
     payment_status = models.ForeignKey(PaymentStatus, on_delete=models.PROTECT, null=True, blank=True, related_name='orders')
     appointment_at = models.DateTimeField(null=True, blank=True)
     description = models.TextField(blank=True)
-    price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
