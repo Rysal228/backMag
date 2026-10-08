@@ -16,6 +16,7 @@ from orders.serializers import (
     OrderStatusSerializer,
     WorkStatusSerializer,
     WorkTypeSerializer,
+    PaymentStatusSerializer,
 )
 from orders.services.appointment_availability import AppointmentAvailabilityService
 from orders.services.order_workflow import OrderWorkflowService
@@ -44,6 +45,12 @@ class OrderStatusViewSet(viewsets.ReadOnlyModelViewSet):
 class WorkStatusViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = WorkStatus.objects.all().order_by('id')
     serializer_class = WorkStatusSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+
+class PaymentStatusViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = PaymentStatus.objects.all().order_by('id')
+    serializer_class = PaymentStatusSerializer
     permission_classes = [permissions.IsAuthenticated]
 
 
