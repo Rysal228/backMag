@@ -329,6 +329,9 @@ class Order(models.Model):
     price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f'Заказ №{self.order_number}'
+
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
