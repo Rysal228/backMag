@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from cars.models import Car
 from orders.services.appointment_availability import AppointmentAvailabilityService
+from orders.services.order_workflow import OrderWorkflowService
 from users.models import CustomUser, UserRole
 from orders.models import (
     AppointmentSettings,
@@ -43,14 +44,14 @@ class OrderStatusSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderStatus
-        fields = ('id', 'name', 'appearance', 'is_initial', 'requiresPayment')
+        fields = ('id', 'code', 'name', 'appearance', 'is_initial', 'requiresPayment')
         read_only_fields = ('id',)
 
 
 class WorkStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkStatus
-        fields = ('id', 'name', 'appearance')
+        fields = ('id', 'code', 'name', 'appearance')
         read_only_fields = ('id',)
 
 
@@ -66,6 +67,13 @@ class WorkStatusInlineSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkStatus
         fields = ('id', 'name', 'appearance')
+
+
+class PaymentStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentStatus
+        fields = ('id', 'code', 'name', 'appearance')
+        read_only_fields = ('id',)
 
 
 class AppointmentSettingsSerializer(serializers.ModelSerializer):
