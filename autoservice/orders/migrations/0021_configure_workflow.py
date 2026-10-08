@@ -46,7 +46,7 @@ def configure_workflow(apps, schema_editor):
         for status in WorkStatus.objects.filter(code__isnull=False)
     }
 
-    admin_role = 'admin'
+    manager_roles = ('admin', 'mechanic')
 
     order_transitions = (
         ('under_review', 'in_progress'),
@@ -55,12 +55,11 @@ def configure_workflow(apps, schema_editor):
     )
     for source, target in order_transitions:
         if source in statuses and target in statuses:
-            OrderStatusTransition.objects.get_or_create(
-                from_status=statuses[source],
-                to_status=statuses[target],
-                role=admin_role,
-                defaults={'enabled': True},
-            )
+            for role in manager_roles:
+                OrderStatusTransition.objects.get_or_create(
+                    from_status=statuses[source], to_status=statuses[target], role=role,
+                    defaults={'enabled': True},
+                )
 
     work_transitions = (
         ('waiting_manager_review', 'manager_review'),
@@ -74,12 +73,11 @@ def configure_workflow(apps, schema_editor):
     )
     for source, target in work_transitions:
         if source in work_statuses and target in work_statuses:
-            WorkStatusTransition.objects.get_or_create(
-                from_status=work_statuses[source],
-                to_status=work_statuses[target],
-                role=admin_role,
-                defaults={'enabled': True},
-            )
+            for role in manager_roles:
+                WorkStatusTransition.objects.get_or_create(
+                    from_status=work_statuses[source], to_status=work_statuses[target], role=role,
+                    defaults={'enabled': True},
+                )
 
 
 class Migration(migrations.Migration):
