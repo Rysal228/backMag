@@ -49,7 +49,7 @@ class OrderWorkAdmin(admin.ModelAdmin):
 @admin.register(OrderStatus)
 class OrderStatusAdmin(admin.ModelAdmin):
     list_display = ('code', 'name', 'appearance', 'is_initial', 'requires_payment')
-    list_editable = ('code',)
+    list_editable = ('name', 'appearance')
     list_filter = ('appearance', 'is_initial', 'requires_payment')
     search_fields = ('name',)
 
@@ -57,7 +57,7 @@ class OrderStatusAdmin(admin.ModelAdmin):
 @admin.register(WorkStatus)
 class WorkStatusAdmin(admin.ModelAdmin):
     list_display = ('code', 'name', 'appearance')
-    list_editable = ('code',)
+    list_editable = ('name', 'appearance')
     list_filter = ('appearance',)
     search_fields = ('name',)
 
