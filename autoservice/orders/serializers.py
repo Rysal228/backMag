@@ -60,13 +60,13 @@ class OrderStatusInlineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderStatus
-        fields = ('id', 'name', 'appearance', 'requiresPayment')
+        fields = ('id', 'code', 'name', 'appearance', 'requiresPayment')
 
 
 class WorkStatusInlineSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkStatus
-        fields = ('id', 'name', 'appearance')
+        fields = ('id', 'code', 'name', 'appearance')
 
 
 class PaymentStatusSerializer(serializers.ModelSerializer):
