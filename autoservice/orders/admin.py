@@ -112,7 +112,6 @@ class OrderAdmin(admin.ModelAdmin):
         'mechanics__phone', 'mechanics__last_name', 'mechanics__first_name',
     )
     filter_horizontal = ('mechanics',)
-    exclude = ('work_type',)
     inlines = (OrderWorkInline,)
 
     @admin.display(description='Специалисты')
