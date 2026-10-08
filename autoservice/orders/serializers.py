@@ -14,6 +14,7 @@ from orders.models import (
     WorkStatus,
     WorkType,
     OrderWork,
+    PaymentStatus,
 )
 
 
@@ -255,14 +256,25 @@ class OrderSerializer(serializers.ModelSerializer):
         if status is None:
             raise serializers.ValidationError({'status': 'Начальный статус заказа не настроен в системе.'})
 
-        work_type_names = validated_data.pop('works')
+        works = validated_data.pop('works', None)
+        work_type_names = validated_data.pop('workTypes', None)
         mechanics = validated_data.pop('mechanics', [])
         car = validated_data['car']
+
+        if works is None:
+            if work_type_names is None:
+                raise serializers.ValidationError({'works': 'Необходимо указать работы заказа.'})
+            works = [{'name': name, 'price': 0} for name in work_type_names]
+
+        work_status = WorkStatus.objects.filter(code=WorkStatus.Code.WAITING_MANAGER_REVIEW).first()
+        payment_status = PaymentStatus.objects.filter(code=PaymentStatus.Code.UNPAID).first()
 
         order = Order.objects.create(
             order_number=self._generate_order_number(),
             customer=request.user,
             status=status,
+            work_status=work_status,
+            payment_status=payment_status,
             car_brand_snapshot=car.brand.name,
             car_model_snapshot=car.model.name,
             car_year_snapshot=car.year,
@@ -270,21 +282,24 @@ class OrderSerializer(serializers.ModelSerializer):
             car_plate_number_snapshot=car.plate_number,
             **validated_data,
         )
-        self._replace_order_works(order, work_type_names)
+        self._replace_order_works(order, works)
         order.mechanics.set(mechanics)
         AppointmentAvailabilityService.sync_order_busy_slot(order)
-
         return order
 
     @transaction.atomic
     def update(self, instance, validated_data):
         appointment_changed = 'appointment_at' in validated_data
-        work_type_names = validated_data.pop('works', None)
+        works = validated_data.pop('works', None)
+        work_type_names = validated_data.pop('workTypes', None)
         mechanics = validated_data.pop('mechanics', None)
         order = super().update(instance, validated_data)
 
-        if work_type_names is not None:
-            self._replace_order_works(order, work_type_names)
+        if works is None and work_type_names is not None:
+            works = [{'name': name, 'price': 0} for name in work_type_names]
+
+        if works is not None:
+            self._replace_order_works(order, works)
 
         if mechanics is not None:
             order.mechanics.set(mechanics)
@@ -295,17 +310,23 @@ class OrderSerializer(serializers.ModelSerializer):
         return order
 
     @staticmethod
-    def _replace_order_works(order, names):
+    def _replace_order_works(order, works):
         OrderWork.objects.filter(order=order).delete()
 
-        for name in names:
-            work_type = WorkType.objects.filter(name__iexact=name).first()
+        for work in works:
+            work_type = work.get('work_type')
+            name = work.get('name', '').strip()
+            if work_type is None:
+                work_type = WorkType.objects.filter(name__iexact=name).first()
             OrderWork.objects.create(
                 order=order,
                 work_type=work_type,
                 name=name,
+                price=work.get('price', 0),
             )
 
+        order.price = sum((work.price for work in order.works.all()), 0)
+        order.save(update_fields=('price',))
     @staticmethod
     def _generate_order_number():
         import uuid
