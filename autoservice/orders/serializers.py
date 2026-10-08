@@ -2,6 +2,7 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 
 from cars.models import Car
 from orders.services.appointment_availability import AppointmentAvailabilityService
@@ -299,6 +300,8 @@ class OrderSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         request = self.context['request']
+        if request.active_role != UserRole.USER:
+            raise PermissionDenied('Создавать заказы может только пользователь.')
         status = OrderStatus.objects.filter(is_initial=True).first()
         if status is None:
             raise serializers.ValidationError({'status': 'Начальный статус заказа не настроен в системе.'})
