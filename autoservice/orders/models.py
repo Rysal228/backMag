@@ -264,6 +264,42 @@ class BusySlot(models.Model):
         return f'{self.date:%d.%m.%Y} {self.start_time:%H:%M}–{self.end_time:%H:%M}{order}'
 
 
+class OrderWork(models.Model):
+    class Meta:
+        verbose_name = 'Работа в заказе'
+        verbose_name_plural = 'Работы в заказах'
+        ordering = ('id',)
+
+    order = models.ForeignKey(
+        'Order',
+        on_delete=models.CASCADE,
+        related_name='works',
+        verbose_name='Заказ',
+    )
+    work_type = models.ForeignKey(
+        WorkType,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='order_works',
+        verbose_name='Тип работ из справочника',
+    )
+    name = models.CharField(
+        max_length=100,
+        verbose_name='Название работы',
+    )
+    price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        verbose_name='Стоимость',
+    )
+
+    def __str__(self):
+        return f'{self.name} — {self.price}'
+
+
 class Order(models.Model):
     class Meta:
         verbose_name = 'Заказ'
