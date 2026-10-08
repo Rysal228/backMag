@@ -196,6 +196,18 @@ class OrderWorkflowService:
         ).exists():
             raise ValidationError({'workStatus': 'Переход статуса работы недоступен.'})
 
+        if (
+            order.work_status.code == WorkStatus.Code.WAITING_PAYMENT
+            and to_status.code == WorkStatus.Code.EXECUTION
+            and (
+                order.payment_status is None
+                or order.payment_status.code != PaymentStatus.Code.PAID
+            )
+        ):
+            raise ValidationError({
+                'paymentStatus': 'Нельзя начать выполнение заказа до его оплаты.'
+            })
+
         order.work_status = to_status
         order.save(update_fields=('work_status',))
         return order
