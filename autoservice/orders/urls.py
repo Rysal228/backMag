@@ -8,6 +8,7 @@ from .views import (
     OrderViewSet,
     WorkStatusViewSet,
     WorkTypeViewSet,
+    PaymentStatusViewSet,
 )
 
 router = routers.DefaultRouter()
@@ -28,6 +29,12 @@ router.register(
     r'work-type',
     WorkTypeViewSet,
     basename='workType',
+)
+
+router.register(
+    r'payment-status',
+    PaymentStatusViewSet,
+    basename='paymentStatus',
 )
 
 router.register(r'', OrderViewSet, basename='orders')
