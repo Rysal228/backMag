@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from cars.models import Car
 from orders.services.appointment_availability import AppointmentAvailabilityService
+from users.models import CustomUser, UserRole
 from orders.models import (
     AppointmentSettings,
     Order,
@@ -148,8 +149,8 @@ class OrderSerializer(serializers.ModelSerializer):
     ownerPhone = serializers.SerializerMethodField()
     mechanics = serializers.PrimaryKeyRelatedField(
         many=True,
-        queryset=__import__('users.models', fromlist=['CustomUser']).CustomUser.objects.filter(
-            role_assignments__role='mechanic',
+        queryset=CustomUser.objects.filter(
+            role_assignments__role=UserRole.MECHANIC,
         ).distinct(),
         required=False,
     )
