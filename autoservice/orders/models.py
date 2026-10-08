@@ -357,6 +357,10 @@ class PaymentStatus(models.Model):
 
 
 class OrderStatusTransition(models.Model):
+    def clean(self):
+        if self.role != UserRole.ADMIN:
+            raise ValidationError({'role': 'Переходами статусов заказа может управлять только администратор.'})
+
     class Meta:
         verbose_name = 'Переход статуса заказа'
         verbose_name_plural = 'Переходы статусов заказа'
@@ -369,6 +373,10 @@ class OrderStatusTransition(models.Model):
 
 
 class WorkStatusTransition(models.Model):
+    def clean(self):
+        if self.role != UserRole.ADMIN:
+            raise ValidationError({'role': 'Переходами статусов работ может управлять только администратор.'})
+
     class Meta:
         verbose_name = 'Переход статуса работы'
         verbose_name_plural = 'Переходы статусов работы'
