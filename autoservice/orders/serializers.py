@@ -261,7 +261,6 @@ class OrderSerializer(serializers.ModelSerializer):
             customer=request.user,
             status=status,
             work_type=work_types[0],
-            mechanic=mechanics[0] if mechanics else None,
             car_brand_snapshot=car.brand.name,
             car_model_snapshot=car.model.name,
             car_year_snapshot=car.year,
@@ -290,8 +289,6 @@ class OrderSerializer(serializers.ModelSerializer):
 
         if mechanics is not None:
             order.mechanics.set(mechanics)
-            primary_mechanic = mechanics[0] if mechanics else None
-            Order.objects.filter(pk=order.pk).update(mechanic=primary_mechanic)
 
         if appointment_changed:
             AppointmentAvailabilityService.sync_order_busy_slot(order)
