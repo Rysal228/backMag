@@ -146,6 +146,13 @@ class OrderSerializer(serializers.ModelSerializer):
     orderNumber = serializers.CharField(source='order_number', read_only=True)
     carName = serializers.SerializerMethodField()
     ownerPhone = serializers.SerializerMethodField()
+    mechanics = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=__import__('users.models', fromlist=['CustomUser']).CustomUser.objects.filter(
+            role_assignments__role='mechanic',
+        ).distinct(),
+        required=False,
+    )
     carYear = serializers.IntegerField(source='car_year_snapshot', read_only=True)
     carVin = serializers.CharField(source='car_vin_snapshot', read_only=True, allow_null=True)
     carPlateNumber = serializers.CharField(source='car_plate_number_snapshot', read_only=True, allow_null=True)
@@ -164,6 +171,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'car',
             'carName',
             'ownerPhone',
+            'mechanics',
             'carYear',
             'carVin',
             'carPlateNumber',
@@ -180,6 +188,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'orderNumber',
             'carName',
             'ownerPhone',
+            'mechanics',
             'carYear',
             'carVin',
             'carPlateNumber',
@@ -243,6 +252,7 @@ class OrderSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'status': 'Начальный статус заказа не настроен в системе.'})
 
         work_type_names = validated_data.pop('work_types')
+        mechanics = validated_data.pop('mechanics', [])
         work_types = self._resolve_work_types(work_type_names)
         car = validated_data['car']
 
@@ -251,6 +261,7 @@ class OrderSerializer(serializers.ModelSerializer):
             customer=request.user,
             status=status,
             work_type=work_types[0],
+            mechanic=mechanics[0] if mechanics else None,
             car_brand_snapshot=car.brand.name,
             car_model_snapshot=car.model.name,
             car_year_snapshot=car.year,
@@ -259,6 +270,7 @@ class OrderSerializer(serializers.ModelSerializer):
             **validated_data,
         )
         order.work_types.set(work_types)
+        order.mechanics.set(mechanics)
         AppointmentAvailabilityService.sync_order_busy_slot(order)
 
         return order
@@ -267,6 +279,7 @@ class OrderSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         appointment_changed = 'appointment_at' in validated_data
         work_type_names = validated_data.pop('work_types', None)
+        mechanics = validated_data.pop('mechanics', None)
         order = super().update(instance, validated_data)
 
         if work_type_names is not None:
@@ -274,6 +287,11 @@ class OrderSerializer(serializers.ModelSerializer):
             order.work_types.set(work_types)
             order.work_type = work_types[0]
             order.save(update_fields=('work_type',))
+
+        if mechanics is not None:
+            order.mechanics.set(mechanics)
+            primary_mechanic = mechanics[0] if mechanics else None
+            Order.objects.filter(pk=order.pk).update(mechanic=primary_mechanic)
 
         if appointment_changed:
             AppointmentAvailabilityService.sync_order_busy_slot(order)
