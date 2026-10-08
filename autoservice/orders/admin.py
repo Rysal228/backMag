@@ -100,14 +100,6 @@ class OrderAdmin(admin.ModelAdmin):
     def work_types_display(self, obj):
         return ', '.join(obj.work_types.values_list('name', flat=True))
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == 'mechanic':
-            kwargs['queryset'] = CustomUser.objects.filter(
-                role_assignments__role=UserRole.MECHANIC,
-            ).distinct()
-
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
     def formfield_for_manytomany(self, db_field, request, **kwargs):
         if db_field.name == 'mechanics':
             kwargs['queryset'] = CustomUser.objects.filter(
@@ -131,9 +123,4 @@ class OrderAdmin(admin.ModelAdmin):
         super().save_related(request, form, formsets, change)
 
         work_type = form.instance.work_types.order_by('id').first()
-        mechanic = form.instance.mechanics.order_by('id').first()
-
-        Order.objects.filter(pk=form.instance.pk).update(
-            work_type=work_type,
-            mechanic=mechanic,
-        )
+        Order.objects.filter(pk=form.instance.pk).update(work_type=work_type)
