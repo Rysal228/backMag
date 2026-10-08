@@ -7,7 +7,7 @@ def migrate_work_types_to_order_works(apps, schema_editor):
     Order = apps.get_model('orders', 'Order')
     OrderWork = apps.get_model('orders', 'OrderWork')
 
-    for order in Order.objects.prefetch_related('work_types').iterator():
+    for order in Order.objects.prefetch_related('work_types').iterator(chunk_size=1000):
         for work_type in order.work_types.all().order_by('id'):
             OrderWork.objects.create(
                 order_id=order.pk,
