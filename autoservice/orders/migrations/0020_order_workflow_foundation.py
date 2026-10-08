@@ -82,7 +82,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='orderwork',
-            constraint=models.UniqueConstraint(condition=Q(('work_type__isnull', False)), fields=('order', 'work_type'), name='unique_catalog_work_per_order'),
+            constraint=models.UniqueConstraint(condition=Q(work_type__isnull=False), fields=('order', 'work_type'), name='unique_catalog_work_per_order'),
         ),
         migrations.RunPython(create_default_payment_statuses, migrations.RunPython.noop),
     ]
