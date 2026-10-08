@@ -50,7 +50,7 @@ class CarViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(owner=self.request.user)
         elif active_role == UserRole.MECHANIC:
             queryset = queryset.filter(
-                orders__mechanic=self.request.user,
+                orders__mechanics=self.request.user,
             ).distinct()
 
         if status not in {'active', 'archived', 'all'}:
