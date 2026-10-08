@@ -52,11 +52,13 @@ class OrderWorkflowService:
         role = cls._role(user)
 
         if role == UserRole.USER:
+            user_id = user.user.id if hasattr(user, 'user') else user.id
+
             return (
                 order.status.code == OrderStatus.Code.UNDER_REVIEW
                 and order.work_status
                 and order.work_status.code == WorkStatus.Code.WAITING_MANAGER_REVIEW
-                and order.customer_id == user.id
+                and order.customer_id == user_id
             )
 
         return (
