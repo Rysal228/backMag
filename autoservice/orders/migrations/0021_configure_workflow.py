@@ -46,7 +46,7 @@ def configure_workflow(apps, schema_editor):
         for status in WorkStatus.objects.filter(code__isnull=False)
     }
 
-    manager_roles = ('admin', 'mechanic')
+    manager_roles = ('admin',)
 
     order_transitions = (
         ('under_review', 'in_progress'),
