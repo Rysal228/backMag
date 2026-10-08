@@ -31,6 +31,13 @@ class WorkTypeAdmin(admin.ModelAdmin):
     search_fields = ('name',)
 
 
+@admin.register(OrderWork)
+class OrderWorkAdmin(admin.ModelAdmin):
+    list_display = ('order', 'name', 'work_type', 'price')
+    list_filter = ('work_type',)
+    search_fields = ('order__order_number', 'name', 'work_type__name')
+
+
 @admin.register(OrderStatus)
 class OrderStatusAdmin(admin.ModelAdmin):
     list_display = ('name', 'appearance', 'is_initial', 'requires_payment')
@@ -81,12 +88,12 @@ class BusySlotAdmin(admin.ModelAdmin):
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
     list_display = ('order_number', 'customer', 'car', 'mechanics_display', 'work_types_display', 'status', 'work_status', 'appointment_at', 'price')
-    list_filter = ('status', 'work_status', 'work_types', 'mechanics')
+    list_filter = ('status', 'work_status', 'works__work_type', 'mechanics')
     search_fields = (
         'order_number', 'customer__phone', 'car__plate_number',
         'mechanics__phone', 'mechanics__last_name', 'mechanics__first_name',
     )
-    filter_horizontal = ('work_types', 'mechanics')
+    filter_horizontal = ('mechanics',)
     exclude = ('work_type',)
 
     @admin.display(description='Специалисты')
