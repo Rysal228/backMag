@@ -34,9 +34,13 @@ class WorkTypeAdmin(admin.ModelAdmin):
 
 @admin.register(OrderWork)
 class OrderWorkAdmin(admin.ModelAdmin):
-    list_display = ('order', 'name', 'work_type', 'price')
+    list_display = ('order', 'name', 'source_display', 'work_type', 'price')
     list_filter = ('work_type',)
     search_fields = ('order__order_number', 'name', 'work_type__name')
+
+    @admin.display(description='Источник')
+    def source_display(self, obj):
+        return 'Справочник' if obj.work_type_id else 'Кастомная'
 
 
 @admin.register(OrderStatus)
