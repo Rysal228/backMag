@@ -13,6 +13,9 @@ from orders.models import (
     WorkStatus,
     WorkType,
     OrderWork,
+    PaymentStatus,
+    OrderStatusTransition,
+    WorkStatusTransition,
 )
 from orders.services.appointment_availability import AppointmentAvailabilityService
 
@@ -45,18 +48,37 @@ class OrderWorkAdmin(admin.ModelAdmin):
 
 @admin.register(OrderStatus)
 class OrderStatusAdmin(admin.ModelAdmin):
-    list_display = ('name', 'appearance', 'is_initial', 'requires_payment')
+    list_display = ('code', 'name', 'appearance', 'is_initial', 'requires_payment')
+    list_editable = ('code',)
     list_filter = ('appearance', 'is_initial', 'requires_payment')
     search_fields = ('name',)
 
 
 @admin.register(WorkStatus)
 class WorkStatusAdmin(admin.ModelAdmin):
-    list_display = ('name', 'appearance')
+    list_display = ('code', 'name', 'appearance')
+    list_editable = ('code',)
     list_filter = ('appearance',)
     search_fields = ('name',)
 
 
+
+@admin.register(PaymentStatus)
+class PaymentStatusAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'appearance')
+    list_editable = ('name', 'appearance')
+
+
+@admin.register(OrderStatusTransition)
+class OrderStatusTransitionAdmin(admin.ModelAdmin):
+    list_display = ('from_status', 'to_status', 'role', 'enabled')
+    list_filter = ('role', 'enabled')
+
+
+@admin.register(WorkStatusTransition)
+class WorkStatusTransitionAdmin(admin.ModelAdmin):
+    list_display = ('from_status', 'to_status', 'role', 'enabled')
+    list_filter = ('role', 'enabled')
 @admin.register(AppointmentSettings)
 class AppointmentSettingsAdmin(admin.ModelAdmin):
     list_display = ('appointment_duration', 'slot_interval')
