@@ -191,6 +191,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'carVin',
             'carPlateNumber',
             'workTypes',
+            'works',
             'mechanics',
             'status',
             'workStatus',
@@ -268,6 +269,7 @@ class OrderSerializer(serializers.ModelSerializer):
             car_plate_number_snapshot=car.plate_number,
             **validated_data,
         )
+        self._replace_order_works(order, work_type_names)
         order.mechanics.set(mechanics)
         AppointmentAvailabilityService.sync_order_busy_slot(order)
 
@@ -276,7 +278,7 @@ class OrderSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         appointment_changed = 'appointment_at' in validated_data
-        work_type_names = validated_data.pop('work_types', None)
+        work_type_names = validated_data.pop('works', None)
         mechanics = validated_data.pop('mechanics', None)
         order = super().update(instance, validated_data)
 
