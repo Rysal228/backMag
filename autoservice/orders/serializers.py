@@ -308,6 +308,10 @@ class OrderSerializer(serializers.ModelSerializer):
             works = [{'name': name, 'price': 0} for name in work_type_names]
         work_status = WorkStatus.objects.filter(code=WorkStatus.Code.WAITING_MANAGER_REVIEW).first()
         payment_status = PaymentStatus.objects.filter(code=PaymentStatus.Code.UNPAID).first()
+        if work_status is None:
+            raise serializers.ValidationError({'workStatus': 'Начальный статус работы не настроен в системе.'})
+        if payment_status is None:
+            raise serializers.ValidationError({'paymentStatus': 'Начальный статус оплаты не настроен в системе.'})
         order = Order.objects.create(
             order_number=self._generate_order_number(),
             customer=request.user,
