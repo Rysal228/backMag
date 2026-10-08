@@ -12,6 +12,7 @@ from orders.models import (
     WeekdaySchedule,
     WorkStatus,
     WorkType,
+    OrderWork,
 )
 from orders.services.appointment_availability import AppointmentAvailabilityService
 
@@ -105,7 +106,7 @@ class OrderAdmin(admin.ModelAdmin):
 
     @admin.display(description='Типы работ')
     def work_types_display(self, obj):
-        return ', '.join(obj.work_types.values_list('name', flat=True))
+        return ', '.join(obj.works.values_list('name', flat=True))
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):
         if db_field.name == 'mechanics':
@@ -126,8 +127,3 @@ class OrderAdmin(admin.ModelAdmin):
         if not change or previous_appointment != obj.appointment_at:
             AppointmentAvailabilityService.sync_order_busy_slot(obj)
 
-    def save_related(self, request, form, formsets, change):
-        super().save_related(request, form, formsets, change)
-
-        work_type = form.instance.work_types.order_by('id').first()
-        Order.objects.filter(pk=form.instance.pk).update(work_type=work_type)
