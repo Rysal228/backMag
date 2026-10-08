@@ -27,12 +27,13 @@ class OrderWorkflowService:
     @classmethod
     def can_edit_works(cls, order: Order, user) -> bool:
         role = cls._role(user)
+        user_id = user.user.id if hasattr(user, 'user') else user.id
         if role == UserRole.USER:
             return (
                 order.status.code == OrderStatus.Code.UNDER_REVIEW
                 and order.work_status
                 and order.work_status.code == WorkStatus.Code.WAITING_MANAGER_REVIEW
-                and order.customer_id == user.id
+                and order.customer_id == user_id
             )
 
         return (
