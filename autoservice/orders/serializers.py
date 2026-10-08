@@ -16,6 +16,20 @@ from orders.models import (
 )
 
 
+class OrderWorkSerializer(serializers.ModelSerializer):
+    workTypeId = serializers.PrimaryKeyRelatedField(
+        source='work_type',
+        queryset=WorkType.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+
+    class Meta:
+        model = OrderWork
+        fields = ('id', 'workTypeId', 'name', 'price')
+        read_only_fields = ('id',)
+
+
 class WorkTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkType
@@ -157,7 +171,7 @@ class OrderSerializer(serializers.ModelSerializer):
     carYear = serializers.IntegerField(source='car_year_snapshot', read_only=True)
     carVin = serializers.CharField(source='car_vin_snapshot', read_only=True, allow_null=True)
     carPlateNumber = serializers.CharField(source='car_plate_number_snapshot', read_only=True, allow_null=True)
-    workTypes = WorkTypesField(source='work_types')
+    workTypes = WorkTypesField(source='works', write_only=True, required=False)\n    works = OrderWorkSerializer(many=True, read_only=True)
     status = OrderStatusInlineSerializer(read_only=True)
     workStatus = WorkStatusInlineSerializer(source='work_status', read_only=True, allow_null=True)
     appointmentAt = serializers.DateTimeField(source='appointment_at')
@@ -282,10 +296,7 @@ class OrderSerializer(serializers.ModelSerializer):
         order = super().update(instance, validated_data)
 
         if work_type_names is not None:
-            work_types = self._resolve_work_types(work_type_names)
-            order.work_types.set(work_types)
-            order.work_type = work_types[0]
-            order.save(update_fields=('work_type',))
+            self._replace_order_works(order, work_type_names)
 
         if mechanics is not None:
             order.mechanics.set(mechanics)
