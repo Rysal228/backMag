@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from orders.models import (
@@ -70,6 +71,8 @@ class OrderWorkflowService:
         return (
             role in cls.MANAGER_ROLES
             and order.status.code == OrderStatus.Code.IN_PROGRESS
+            and order.work_status
+            and order.work_status.code == WorkStatus.Code.INTAKE
         )
 
     @classmethod
@@ -81,23 +84,62 @@ class OrderWorkflowService:
 
     @classmethod
     def can_change_payment(cls, order: Order, user) -> bool:
-        return cls._role(user) in cls.MANAGER_ROLES and order.status.code == OrderStatus.Code.IN_PROGRESS
+        return (
+            cls._role(user) in cls.MANAGER_ROLES
+            and order.status.code == OrderStatus.Code.IN_PROGRESS
+            and order.work_status
+            and order.work_status.code == WorkStatus.Code.WAITING_PAYMENT
+        )
 
     @classmethod
     def can_transition_status(cls, order: Order, user):
         role = cls._role(user)
-        return OrderStatusTransition.objects.filter(from_status=order.status, role=role, enabled=True).exists()
+        return OrderStatusTransition.objects.filter(
+            from_status=order.status,
+            to_status__in=cls._available_order_targets(order),
+            role=role,
+            enabled=True,
+        ).exists()
+
+    @classmethod
+    def _available_order_targets(cls, order: Order):
+        if order.status.code == OrderStatus.Code.UNDER_REVIEW:
+            if order.work_status and order.work_status.code == WorkStatus.Code.MANAGER_REVIEW:
+                return OrderStatus.objects.filter(
+                    code__in=(
+                        OrderStatus.Code.IN_PROGRESS,
+                        OrderStatus.Code.COMPLETED,
+                    )
+                )
+            return OrderStatus.objects.none()
+
+        if order.status.code == OrderStatus.Code.IN_PROGRESS:
+            if order.work_status and order.work_status.code in (
+                WorkStatus.Code.EXECUTION,
+                WorkStatus.Code.REFUSED,
+            ):
+                return OrderStatus.objects.filter(code=OrderStatus.Code.COMPLETED)
+            return OrderStatus.objects.none()
+
+        return OrderStatus.objects.none()
 
     @classmethod
     def can_transition_work_status(cls, order: Order, user):
         role = cls._role(user)
         if order.work_status_id is None:
             return False
-        return WorkStatusTransition.objects.filter(from_status=order.work_status, role=role, enabled=True).exists()
+
+        return WorkStatusTransition.objects.filter(
+            from_status=order.work_status,
+            role=role,
+            enabled=True,
+        ).exists()
 
     @classmethod
+    @transaction.atomic
     def transition_status(cls, order: Order, user, to_status: OrderStatus):
         role = cls._role(user)
+
         if not OrderStatusTransition.objects.filter(
             from_status=order.status,
             to_status=to_status,
@@ -106,11 +148,41 @@ class OrderWorkflowService:
         ).exists():
             raise ValidationError({'status': 'Переход заказа в выбранный статус недоступен.'})
 
+        current_work_code = order.work_status.code if order.work_status else None
+        target_work_code = None
+
+        if (
+            order.status.code == OrderStatus.Code.UNDER_REVIEW
+            and to_status.code == OrderStatus.Code.IN_PROGRESS
+            and current_work_code == WorkStatus.Code.MANAGER_REVIEW
+        ):
+            target_work_code = WorkStatus.Code.WAITING_ARRIVAL
+        elif (
+            order.status.code == OrderStatus.Code.UNDER_REVIEW
+            and to_status.code == OrderStatus.Code.COMPLETED
+            and current_work_code == WorkStatus.Code.MANAGER_REVIEW
+        ):
+            target_work_code = WorkStatus.Code.REFUSED
+        elif (
+            order.status.code == OrderStatus.Code.IN_PROGRESS
+            and to_status.code == OrderStatus.Code.COMPLETED
+            and current_work_code == WorkStatus.Code.EXECUTION
+        ):
+            target_work_code = WorkStatus.Code.OWNER_VISIT
+
+        if target_work_code is None:
+            raise ValidationError({
+                'status': 'Текущий статус работы не позволяет выполнить выбранный переход заказа.'
+            })
+
+        target_work = WorkStatus.objects.get(code=target_work_code)
         order.status = to_status
-        order.save(update_fields=('status',))
+        order.work_status = target_work
+        order.save(update_fields=('status', 'work_status'))
         return order
 
     @classmethod
+    @transaction.atomic
     def transition_work_status(cls, order: Order, user, to_status: WorkStatus):
         role = cls._role(user)
         if order.work_status_id is None:
