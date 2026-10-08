@@ -127,7 +127,7 @@ class OrderWorkInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('order_number', 'customer', 'car', 'mechanics_display', 'work_types_display', 'status', 'work_status', 'appointment_at', 'price')
+    list_display = ('order_number', 'customer', 'car', 'mechanics_display', 'work_types_display', 'status', 'work_status', 'appointment_at', 'total_price_display')
     list_filter = ('status', 'work_status', 'works__work_type', 'mechanics')
     search_fields = (
         'order_number', 'customer__phone', 'car__plate_number',
@@ -135,6 +135,10 @@ class OrderAdmin(admin.ModelAdmin):
     )
     filter_horizontal = ('mechanics',)
     inlines = (OrderWorkInline,)
+
+    @admin.display(description='Итого')
+    def total_price_display(self, obj):
+        return sum((work.price for work in obj.works.all()), 0)
 
     @admin.display(description='Специалисты')
     def mechanics_display(self, obj):
