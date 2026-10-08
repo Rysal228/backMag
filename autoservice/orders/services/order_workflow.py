@@ -70,8 +70,6 @@ class OrderWorkflowService:
         return (
             role in cls.MANAGER_ROLES
             and order.status.code == OrderStatus.Code.IN_PROGRESS
-            and order.work_status
-            and order.work_status.code == WorkStatus.Code.INTAKE
         )
 
     @classmethod
