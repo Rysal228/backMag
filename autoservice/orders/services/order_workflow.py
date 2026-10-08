@@ -12,7 +12,7 @@ from users.models import UserRole
 
 
 class OrderWorkflowService:
-    MANAGER_ROLES = {UserRole.ADMIN}
+    MANAGER_ROLES = {UserRole.ADMIN, UserRole.MECHANIC}
 
     @classmethod
     def _role(cls, user):
@@ -84,6 +84,18 @@ class OrderWorkflowService:
         return cls._role(user) in cls.MANAGER_ROLES and order.status.code == OrderStatus.Code.IN_PROGRESS
 
     @classmethod
+    def can_transition_status(cls, order: Order, user):
+        role = cls._role(user)
+        return OrderStatusTransition.objects.filter(from_status=order.status, role=role, enabled=True).exists()
+
+    @classmethod
+    def can_transition_work_status(cls, order: Order, user):
+        role = cls._role(user)
+        if order.work_status_id is None:
+            return False
+        return WorkStatusTransition.objects.filter(from_status=order.work_status, role=role, enabled=True).exists()
+
+    @classmethod
     def transition_status(cls, order: Order, user, to_status: OrderStatus):
         role = cls._role(user)
         if not OrderStatusTransition.objects.filter(
@@ -127,6 +139,8 @@ class OrderWorkflowService:
     @classmethod
     def permissions(cls, order: Order, user):
         return {
+            'canTransitionStatus': cls.can_transition_status(order, user),
+            'canTransitionWorkStatus': cls.can_transition_work_status(order, user),
             'canEditWorks': cls.can_edit_works(order, user),
             'canEditPrice': cls.can_edit_price(order, user),
             'canEditAppointment': cls.can_edit_appointment(order, user),
