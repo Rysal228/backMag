@@ -113,6 +113,7 @@ class WorkStatus(models.Model):
         verbose_name = 'Статус работы'
         verbose_name_plural = 'Статусы работ'
 
+    code = models.CharField(max_length=50, unique=True, null=True, blank=True)
     name = models.CharField(max_length=100, unique=True)
     appearance = models.CharField(
         verbose_name='Внешний вид статуса',
