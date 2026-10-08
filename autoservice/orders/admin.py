@@ -80,14 +80,21 @@ class BusySlotAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('order_number', 'customer', 'car', 'mechanic', 'work_types_display', 'status', 'work_status', 'appointment_at', 'price')
-    list_filter = ('status', 'work_status', 'work_types', 'mechanic')
+    list_display = ('order_number', 'customer', 'car', 'mechanics_display', 'work_types_display', 'status', 'work_status', 'appointment_at', 'price')
+    list_filter = ('status', 'work_status', 'work_types', 'mechanics')
     search_fields = (
         'order_number', 'customer__phone', 'car__plate_number',
-        'mechanic__phone', 'mechanic__last_name', 'mechanic__first_name',
+        'mechanics__phone', 'mechanics__last_name', 'mechanics__first_name',
     )
-    filter_horizontal = ('work_types',)
+    filter_horizontal = ('work_types', 'mechanics')
     exclude = ('work_type',)
+
+    @admin.display(description='Специалисты')
+    def mechanics_display(self, obj):
+        return ', '.join(
+            mechanic.get_full_name() or mechanic.phone
+            for mechanic in obj.mechanics.all()
+        )
 
     @admin.display(description='Типы работ')
     def work_types_display(self, obj):
@@ -116,6 +123,9 @@ class OrderAdmin(admin.ModelAdmin):
         super().save_related(request, form, formsets, change)
 
         work_type = form.instance.work_types.order_by('id').first()
+        mechanic = form.instance.mechanics.order_by('id').first()
 
-        if work_type is not None:
-            Order.objects.filter(pk=form.instance.pk).update(work_type=work_type)
+        Order.objects.filter(pk=form.instance.pk).update(
+            work_type=work_type,
+            mechanic=mechanic,
+        )
