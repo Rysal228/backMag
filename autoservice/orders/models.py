@@ -6,7 +6,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
-from users.models import CustomUser, UserRole
+from users.models import CustomUser
 from cars.models import Car
 
 
@@ -292,14 +292,6 @@ class Order(models.Model):
     description = models.TextField(blank=True)
     price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
-
-    def clean(self):
-        super().clean()
-
-        if self.mechanic_id and not self.mechanic.has_role(UserRole.MECHANIC):
-            raise ValidationError({
-                'mechanic': 'Назначенный специалист должен иметь роль механика.'
-            })
 
     def save(self, *args, **kwargs):
         self.full_clean()
