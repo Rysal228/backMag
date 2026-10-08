@@ -272,17 +272,9 @@ class Order(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     order_number = models.CharField(max_length=50, unique=True)
     customer = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='orders')
-    mechanic = models.ForeignKey(
-        CustomUser,
-        on_delete=models.SET_NULL,
-        related_name='assigned_orders',
-        null=True,
-        blank=True,
-        verbose_name='Основной специалист',
-    )
     mechanics = models.ManyToManyField(
         CustomUser,
-        related_name='assigned_orders_many',
+        related_name='assigned_orders',
         blank=True,
         verbose_name='Специалисты',
     )
