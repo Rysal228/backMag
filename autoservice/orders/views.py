@@ -5,7 +5,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from orders.models import AppointmentSettings, Order, OrderFilterKey, OrderFilterPermission, ScheduleBlock, WeekdaySchedule, OrderStatus, WorkStatus, WorkType
+from orders.models import AppointmentSettings, Order, OrderFilterKey, OrderFilterPermission, ScheduleBlock, WeekdaySchedule, OrderStatus, WorkStatus, WorkType, PaymentStatus
 from orders.filters import OrderFilter
 from orders.pagination import OrderPagination
 from orders.permissions import validate_filter_permissions
@@ -18,6 +18,7 @@ from orders.serializers import (
     WorkTypeSerializer,
 )
 from orders.services.appointment_availability import AppointmentAvailabilityService
+from orders.services.order_workflow import OrderWorkflowService
 
 
 class WorkTypeViewSet(viewsets.ReadOnlyModelViewSet):
@@ -85,10 +86,10 @@ class OrderViewSet(viewsets.ModelViewSet):
             'customer',
             'car__brand',
             'car__model',
-            'work_type',
             'status',
             'work_status',
-        ).prefetch_related('work_types')
+            'payment_status',
+        ).prefetch_related('works__work_type', 'mechanics')
 
         if self.request.active_role in ('mechanic', 'admin'):
             return queryset.order_by('-created_at')
@@ -98,6 +99,41 @@ class OrderViewSet(viewsets.ModelViewSet):
     def filter_queryset(self, queryset):
         validate_filter_permissions(self.request)
         return super().filter_queryset(queryset)
+
+    @action(detail=True, methods=['get'], url_path='permissions')
+    def permissions(self, request, pk=None):
+        order = self.get_object()
+        return Response(OrderWorkflowService.permissions(order, request))
+
+    @action(detail=True, methods=['post'], url_path='transition-status')
+    def transition_status(self, request, pk=None):
+        order = self.get_object()
+        status_id = request.data.get('statusId')
+        status = OrderStatus.objects.filter(pk=status_id).first()
+        if status is None:
+            raise serializers.ValidationError({'statusId': 'Статус заказа не найден.'})
+        OrderWorkflowService.transition_status(order, request, status)
+        return Response(self.get_serializer(order).data)
+
+    @action(detail=True, methods=['post'], url_path='transition-work-status')
+    def transition_work_status(self, request, pk=None):
+        order = self.get_object()
+        status_id = request.data.get('statusId')
+        status = WorkStatus.objects.filter(pk=status_id).first()
+        if status is None:
+            raise serializers.ValidationError({'statusId': 'Статус работы не найден.'})
+        OrderWorkflowService.transition_work_status(order, request, status)
+        return Response(self.get_serializer(order).data)
+
+    @action(detail=True, methods=['post'], url_path='payment-status')
+    def payment_status(self, request, pk=None):
+        order = self.get_object()
+        status_id = request.data.get('statusId')
+        status = PaymentStatus.objects.filter(pk=status_id).first()
+        if status is None:
+            raise serializers.ValidationError({'statusId': 'Статус оплаты не найден.'})
+        OrderWorkflowService.set_payment_status(order, request, status)
+        return Response(self.get_serializer(order).data)
 
     @action(detail=False, methods=['get'], url_path='filter-permissions')
     def filter_permissions(self, request):
