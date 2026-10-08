@@ -278,7 +278,13 @@ class Order(models.Model):
         related_name='assigned_orders',
         null=True,
         blank=True,
-        verbose_name='Специалист',
+        verbose_name='Основной специалист',
+    )
+    mechanics = models.ManyToManyField(
+        CustomUser,
+        related_name='assigned_orders_many',
+        blank=True,
+        verbose_name='Специалисты',
     )
     car = models.ForeignKey(Car, on_delete=models.PROTECT, related_name='orders')
     car_brand_snapshot = models.CharField(max_length=100)
