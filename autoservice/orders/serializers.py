@@ -181,8 +181,10 @@ class OrderSerializer(serializers.ModelSerializer):
     carYear = serializers.IntegerField(source='car_year_snapshot', read_only=True)
     carVin = serializers.CharField(source='car_vin_snapshot', read_only=True, allow_null=True)
     carPlateNumber = serializers.CharField(source='car_plate_number_snapshot', read_only=True, allow_null=True)
-    workTypes = WorkTypesField(source='works', write_only=True, required=False)
-    works = OrderWorkSerializer(many=True, read_only=True)
+    workTypes = WorkTypesField(write_only=True, required=False)
+    works = OrderWorkSerializer(many=True, required=False)
+    paymentStatus = serializers.SerializerMethodField()
+    permissions = serializers.SerializerMethodField()
     status = OrderStatusInlineSerializer(read_only=True)
     workStatus = WorkStatusInlineSerializer(source='work_status', read_only=True, allow_null=True)
     appointmentAt = serializers.DateTimeField(source='appointment_at')
@@ -205,6 +207,8 @@ class OrderSerializer(serializers.ModelSerializer):
             'mechanics',
             'status',
             'workStatus',
+            'paymentStatus',
+            'permissions',
             'appointmentAt',
             'description',
             'price',
@@ -220,6 +224,8 @@ class OrderSerializer(serializers.ModelSerializer):
             'carPlateNumber',
             'status',
             'workStatus',
+            'paymentStatus',
+            'permissions',
             'price',
             'createdAt',
         )
@@ -239,6 +245,19 @@ class OrderSerializer(serializers.ModelSerializer):
     def get_ownerPhone(self, obj):
         return obj.customer.phone
 
+    def get_paymentStatus(self, obj):
+        if obj.payment_status is None:
+            return None
+        return {
+            'id': obj.payment_status.id,
+            'code': obj.payment_status.code,
+            'name': obj.payment_status.name,
+            'appearance': obj.payment_status.appearance,
+        }
+
+    def get_permissions(self, obj):
+        return OrderWorkflowService.permissions(obj, self.context['request'])
+
     def validate_car(self, value: Car):
         request = self.context.get('request')
         if request and (
@@ -256,27 +275,37 @@ class OrderSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Выбранное время недоступно для записи.')
         return value
 
+    def validate(self, attrs):
+        instance = self.instance
+        request = self.context['request']
+        if instance is None:
+            return attrs
+        if 'appointment_at' in attrs and not OrderWorkflowService.can_edit_appointment(instance, request):
+            raise serializers.ValidationError({'appointmentAt': 'Изменение даты записи недоступно на текущем этапе заказа.'})
+        if ('works' in attrs or 'workTypes' in attrs) and not OrderWorkflowService.can_edit_works(instance, request):
+            raise serializers.ValidationError({'works': 'Изменение работ недоступно на текущем этапе заказа.'})
+        if 'mechanics' in attrs and not OrderWorkflowService.can_assign_mechanics(instance, request):
+            raise serializers.ValidationError({'mechanics': 'Изменение специалистов недоступно на текущем этапе заказа.'})
+        if 'description' in attrs and not OrderWorkflowService.can_edit_description(instance, request):
+            raise serializers.ValidationError({'description': 'Изменение описания недоступно на текущем этапе заказа.'})
+        return attrs
+
     @transaction.atomic
     def create(self, validated_data):
         request = self.context['request']
         status = OrderStatus.objects.filter(is_initial=True).first()
-
         if status is None:
             raise serializers.ValidationError({'status': 'Начальный статус заказа не настроен в системе.'})
-
         works = validated_data.pop('works', None)
         work_type_names = validated_data.pop('workTypes', None)
         mechanics = validated_data.pop('mechanics', [])
         car = validated_data['car']
-
         if works is None:
             if work_type_names is None:
                 raise serializers.ValidationError({'works': 'Необходимо указать работы заказа.'})
             works = [{'name': name, 'price': 0} for name in work_type_names]
-
         work_status = WorkStatus.objects.filter(code=WorkStatus.Code.WAITING_MANAGER_REVIEW).first()
         payment_status = PaymentStatus.objects.filter(code=PaymentStatus.Code.UNPAID).first()
-
         order = Order.objects.create(
             order_number=self._generate_order_number(),
             customer=request.user,
@@ -302,37 +331,25 @@ class OrderSerializer(serializers.ModelSerializer):
         work_type_names = validated_data.pop('workTypes', None)
         mechanics = validated_data.pop('mechanics', None)
         order = super().update(instance, validated_data)
-
         if works is None and work_type_names is not None:
             works = [{'name': name, 'price': 0} for name in work_type_names]
-
         if works is not None:
             self._replace_order_works(order, works)
-
         if mechanics is not None:
             order.mechanics.set(mechanics)
-
         if appointment_changed:
             AppointmentAvailabilityService.sync_order_busy_slot(order)
-
         return order
 
     @staticmethod
     def _replace_order_works(order, works):
         OrderWork.objects.filter(order=order).delete()
-
         for work in works:
             work_type = work.get('work_type')
             name = work.get('name', '').strip()
             if work_type is None:
                 work_type = WorkType.objects.filter(name__iexact=name).first()
-            OrderWork.objects.create(
-                order=order,
-                work_type=work_type,
-                name=name,
-                price=work.get('price', 0),
-            )
-
+            OrderWork.objects.create(order=order, work_type=work_type, name=name, price=work.get('price', 0))
         order.price = sum((work.price for work in order.works.all()), 0)
         order.save(update_fields=('price',))
     @staticmethod
