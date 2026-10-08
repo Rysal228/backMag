@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -189,7 +190,7 @@ class OrderSerializer(serializers.ModelSerializer):
     workStatus = WorkStatusInlineSerializer(source='work_status', read_only=True, allow_null=True)
     appointmentAt = serializers.DateTimeField(source='appointment_at')
     createdAt = serializers.DateTimeField(source='created_at', read_only=True)
-    price = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=False, read_only=True)
+    price = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -244,6 +245,9 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def get_ownerPhone(self, obj):
         return obj.customer.phone
+
+    def get_price(self, obj):
+        return obj.works.aggregate(total=Sum('price'))['total'] or 0
 
     def get_paymentStatus(self, obj):
         if obj.payment_status is None:
@@ -365,8 +369,6 @@ class OrderSerializer(serializers.ModelSerializer):
         OrderWork.objects.filter(order=order).delete()
         for work_type, name, price in prepared:
             OrderWork.objects.create(order=order, work_type=work_type, name=name, price=price)
-        order.price = sum((work.price for work in order.works.all()), 0)
-        order.save(update_fields=('price',))
     @staticmethod
     def _generate_order_number():
         import uuid
