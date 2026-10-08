@@ -108,6 +108,14 @@ class OrderAdmin(admin.ModelAdmin):
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == 'mechanics':
+            kwargs['queryset'] = CustomUser.objects.filter(
+                role_assignments__role=UserRole.MECHANIC,
+            ).distinct()
+
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
     @transaction.atomic
     def save_model(self, request, obj, form, change):
         previous_appointment = None
