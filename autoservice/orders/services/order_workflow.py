@@ -17,6 +17,8 @@ class OrderWorkflowService:
     @classmethod
     def _role(cls, user):
         role = getattr(user, 'active_role', None)
+        if role is None and hasattr(user, 'user'):
+            role = getattr(user, 'active_role', None)
         if role is None:
             raise PermissionDenied('Активная роль не определена.')
         return role
