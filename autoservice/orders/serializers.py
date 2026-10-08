@@ -172,7 +172,6 @@ class OrderSerializer(serializers.ModelSerializer):
             'car',
             'carName',
             'ownerPhone',
-            'mechanics',
             'carYear',
             'carVin',
             'carPlateNumber',
