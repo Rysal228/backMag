@@ -12,7 +12,7 @@ from users.models import UserRole
 
 
 class OrderWorkflowService:
-    MANAGER_ROLES = {UserRole.ADMIN, UserRole.MECHANIC}
+    MANAGER_ROLES = {UserRole.ADMIN}
 
     @classmethod
     def _role(cls, user):
