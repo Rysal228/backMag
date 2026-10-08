@@ -28,20 +28,21 @@ def configure_work_statuses(apps, schema_editor):
 
     statuses = {}
     for code, name, appearance in WORK_STATUSES:
-        status, _ = WorkStatus.objects.get_or_create(
-            code=code,
-            defaults={
-                'name': name,
-                'appearance': appearance,
-            },
-        )
+        status = WorkStatus.objects.filter(code=code).first()
+        if status is None:
+            status = WorkStatus.objects.filter(name=name).first()
 
-        # Keep existing installations consistent as well: older databases
-        # may contain the status by name with an empty code.
-        if status.name != name or status.appearance != appearance:
+        if status is None:
+            status = WorkStatus.objects.create(
+                code=code,
+                name=name,
+                appearance=appearance,
+            )
+        else:
+            status.code = code
             status.name = name
             status.appearance = appearance
-            status.save(update_fields=('name', 'appearance'))
+            status.save(update_fields=('code', 'name', 'appearance'))
 
         statuses[code] = status
 
