@@ -280,6 +280,8 @@ class OrderSerializer(serializers.ModelSerializer):
         request = self.context['request']
         if instance is None:
             return attrs
+        if 'car' in attrs:
+            raise serializers.ValidationError({'car': 'Автомобиль заказа нельзя заменить после его создания.'})
         if 'appointment_at' in attrs and not OrderWorkflowService.can_edit_appointment(instance, request):
             raise serializers.ValidationError({'appointmentAt': 'Изменение даты записи недоступно на текущем этапе заказа.'})
         if ('works' in attrs or 'workTypes' in attrs) and not OrderWorkflowService.can_edit_works(instance, request):
@@ -343,13 +345,22 @@ class OrderSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def _replace_order_works(order, works):
-        OrderWork.objects.filter(order=order).delete()
+        prepared = []
+        seen_work_types = set()
         for work in works:
             work_type = work.get('work_type')
             name = work.get('name', '').strip()
             if work_type is None:
                 work_type = WorkType.objects.filter(name__iexact=name).first()
-            OrderWork.objects.create(order=order, work_type=work_type, name=name, price=work.get('price', 0))
+            if work_type and work_type.pk in seen_work_types:
+                raise serializers.ValidationError({'works': f'Тип работы «{work_type.name}» нельзя добавить в заказ дважды.'})
+            if work_type:
+                seen_work_types.add(work_type.pk)
+            prepared.append((work_type, name, work.get('price', 0)))
+
+        OrderWork.objects.filter(order=order).delete()
+        for work_type, name, price in prepared:
+            OrderWork.objects.create(order=order, work_type=work_type, name=name, price=price)
         order.price = sum((work.price for work in order.works.all()), 0)
         order.save(update_fields=('price',))
     @staticmethod
