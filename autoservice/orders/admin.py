@@ -90,6 +90,19 @@ class BusySlotAdmin(admin.ModelAdmin):
     ordering = ('date', 'start_time')
 
 
+class OrderWorkInline(admin.TabularInline):
+    model = OrderWork
+    extra = 0
+    fields = ('name', 'source_display', 'work_type', 'price')
+    readonly_fields = ('source_display',)
+
+    @admin.display(description='Источник')
+    def source_display(self, obj):
+        if not obj.pk:
+            return 'Определится после сохранения'
+        return 'Справочник' if obj.work_type_id else 'Кастомная'
+
+
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
     list_display = ('order_number', 'customer', 'car', 'mechanics_display', 'work_types_display', 'status', 'work_status', 'appointment_at', 'price')
@@ -100,6 +113,7 @@ class OrderAdmin(admin.ModelAdmin):
     )
     filter_horizontal = ('mechanics',)
     exclude = ('work_type',)
+    inlines = (OrderWorkInline,)
 
     @admin.display(description='Специалисты')
     def mechanics_display(self, obj):
