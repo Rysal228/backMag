@@ -11,12 +11,6 @@ from users.models import CustomUser, UserRole
 from cars.models import Car
 
 
-class StatusAppearance(models.TextChoices):
-    POSITIVE = 'positive', 'Положительный'
-    WARNING = 'warning', 'Предупреждение'
-    NEGATIVE = 'negative', 'Отрицательный'
-
-
 class OrderFilterKey(models.TextChoices):
     SEARCH = 'search', 'Поиск'
     ORDER_NUMBER = 'order_number', 'Номер заказа'
@@ -80,12 +74,6 @@ class OrderStatus(models.Model):
 
     code = models.CharField(max_length=50, unique=True, null=True, blank=True)
     name = models.CharField(max_length=100, unique=True)
-    appearance = models.CharField(
-        verbose_name='Внешний вид статуса',
-        max_length=20,
-        choices=StatusAppearance.choices,
-        default=StatusAppearance.WARNING,
-    )
     is_initial = models.BooleanField(verbose_name='Начальный статус', default=False)
     requires_payment = models.BooleanField(verbose_name='Требует оплаты', default=False)
 
@@ -119,12 +107,6 @@ class WorkStatus(models.Model):
 
     code = models.CharField(max_length=50, unique=True, null=True, blank=True)
     name = models.CharField(max_length=100, unique=True)
-    appearance = models.CharField(
-        verbose_name='Внешний вид статуса',
-        max_length=20,
-        choices=StatusAppearance.choices,
-        default=StatusAppearance.WARNING,
-    )
 
     def __str__(self):
         return self.name
@@ -350,7 +332,6 @@ class PaymentStatus(models.Model):
 
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=100, unique=True)
-    appearance = models.CharField(max_length=20, choices=StatusAppearance.choices, default=StatusAppearance.WARNING)
 
     def __str__(self):
         return self.name
