@@ -48,25 +48,24 @@ class OrderWorkAdmin(admin.ModelAdmin):
 
 @admin.register(OrderStatus)
 class OrderStatusAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'appearance', 'is_initial', 'requires_payment')
-    list_editable = ('name', 'appearance')
-    list_filter = ('appearance', 'is_initial', 'requires_payment')
+    list_display = ('code', 'name', 'is_initial', 'requires_payment')
+    list_editable = ('name',)
+    list_filter = ('is_initial', 'requires_payment')
     search_fields = ('name',)
 
 
 @admin.register(WorkStatus)
 class WorkStatusAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'appearance')
-    list_editable = ('name', 'appearance')
-    list_filter = ('appearance',)
+    list_display = ('code', 'name')
+    list_editable = ('name',)
     search_fields = ('name',)
 
 
 
 @admin.register(PaymentStatus)
 class PaymentStatusAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'appearance')
-    list_editable = ('name', 'appearance')
+    list_display = ('code', 'name')
+    list_editable = ('name',)
 
 
 @admin.register(OrderStatusTransition)
