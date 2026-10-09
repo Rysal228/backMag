@@ -46,14 +46,14 @@ class OrderStatusSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderStatus
-        fields = ('id', 'code', 'name', 'appearance', 'is_initial', 'requiresPayment')
+        fields = ('id', 'code', 'name', 'is_initial', 'requiresPayment')
         read_only_fields = ('id',)
 
 
 class WorkStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkStatus
-        fields = ('id', 'code', 'name', 'appearance')
+        fields = ('id', 'code', 'name')
         read_only_fields = ('id',)
 
 
@@ -62,19 +62,19 @@ class OrderStatusInlineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderStatus
-        fields = ('id', 'code', 'name', 'appearance', 'requiresPayment')
+        fields = ('id', 'code', 'name', 'requiresPayment')
 
 
 class WorkStatusInlineSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkStatus
-        fields = ('id', 'code', 'name', 'appearance')
+        fields = ('id', 'code', 'name')
 
 
 class PaymentStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentStatus
-        fields = ('id', 'code', 'name', 'appearance')
+        fields = ('id', 'code', 'name')
         read_only_fields = ('id',)
 
 
@@ -257,7 +257,6 @@ class OrderSerializer(serializers.ModelSerializer):
             'id': obj.payment_status.id,
             'code': obj.payment_status.code,
             'name': obj.payment_status.name,
-            'appearance': obj.payment_status.appearance,
         }
 
     def get_permissions(self, obj):
