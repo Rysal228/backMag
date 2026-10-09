@@ -23,13 +23,14 @@ class ChatRoomSerializer(serializers.ModelSerializer):
     mechanicId = serializers.UUIDField(source='mechanic_id', read_only=True, allow_null=True)
     mechanicName = serializers.SerializerMethodField()
     typeLabel = serializers.CharField(source='get_type_display', read_only=True)
+    createdAt = serializers.DateTimeField(source='created_at', read_only=True)
     lastMessage = serializers.SerializerMethodField()
 
     class Meta:
         model = ChatRoom
         fields = (
             'id', 'orderId', 'orderNumber', 'type', 'typeLabel',
-            'mechanicId', 'mechanicName', 'created_at', 'lastMessage',
+            'mechanicId', 'mechanicName', 'createdAt', 'lastMessage',
         )
         read_only_fields = fields
 
