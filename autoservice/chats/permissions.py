@@ -27,10 +27,7 @@ def can_access_order_chats(order, request):
     return False
 
 
-def can_access_room(room: ChatRoom, request) -> bool:
-    role = active_role(request)
-    user = request.user
-
+def can_access_room_for(room: ChatRoom, user, role) -> bool:
     if room.type == ChatRoom.Type.CUSTOMER_MANAGER:
         return (
             (role == UserRole.USER and room.order.customer_id == user.id)
@@ -39,7 +36,7 @@ def can_access_room(room: ChatRoom, request) -> bool:
 
     if room.type == ChatRoom.Type.MANAGER_MECHANIC:
         return (
-            (role == UserRole.ADMIN)
+            role == UserRole.ADMIN
             or (
                 role == UserRole.MECHANIC
                 and room.mechanic_id == user.id
@@ -48,3 +45,7 @@ def can_access_room(room: ChatRoom, request) -> bool:
         )
 
     return False
+
+
+def can_access_room(room: ChatRoom, request) -> bool:
+    return can_access_room_for(room, request.user, active_role(request))
