@@ -50,8 +50,9 @@ class CustomUserViewSet(viewsets.ReadOnlyModelViewSet):
         if not search and not mechanic_ids:
             return queryset.none()
 
-        matching_users = Q()
+        matching_users = None
         if search:
+            matching_users = Q()
             for term in search.split():
                 term_query = (
                     Q(first_name__icontains=term)
@@ -63,9 +64,11 @@ class CustomUserViewSet(viewsets.ReadOnlyModelViewSet):
                     term_query |= Q(phone__icontains=digits)
                 matching_users &= term_query
 
-        if mechanic_ids:
+        if mechanic_ids and matching_users is not None:
             queryset = queryset.filter(Q(id__in=mechanic_ids) | matching_users)
-        else:
+        elif mechanic_ids:
+            queryset = queryset.filter(id__in=mechanic_ids)
+        elif matching_users is not None:
             queryset = queryset.filter(matching_users)
 
         return queryset.order_by('last_name', 'first_name', 'patronymic')[:20]
