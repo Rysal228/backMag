@@ -1,5 +1,6 @@
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.utils import timezone
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from chats.models import ChatMessage, ChatRoom
@@ -13,6 +14,7 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
         self.active_role = None
         self.room = None
         self.group_name = None
+        self.token_expires_at = None
         await self.accept()
 
     async def disconnect(self, close_code):
@@ -22,6 +24,16 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
     async def receive_json(self, content, **kwargs):
         if self.user is None:
             await self._authenticate(content)
+            return
+
+        if self.token_expires_at is None or timezone.now().timestamp() >= self.token_expires_at:
+            await self._send_error('token_expired', 'Срок действия токена истёк. Переподключитесь.')
+            await self.close(code=4401)
+            return
+
+        if not await self._still_authorized():
+            await self._send_error('chat_access_revoked', 'Доступ к этому чату больше не разрешён.')
+            await self.close(code=4403)
             return
 
         if content.get('type') != 'send_message':
@@ -66,7 +78,7 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
             await self.close(code=4401)
             return
 
-        user, role = result
+        user, role, expires_at = result
         room = await self._get_accessible_room(user.pk, role)
         if room is None:
             await self._send_error('chat_access_denied', 'Нет доступа к этому чату.')
@@ -75,6 +87,7 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
 
         self.user = user
         self.active_role = role
+        self.token_expires_at = expires_at
         self.room = room
         self.group_name = f'chat_{room.pk.hex}'
         await self.channel_layer.group_add(self.group_name, self.channel_name)
@@ -94,7 +107,7 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
         role = token.get('active_role')
         if not role or not user.has_role(role):
             return None
-        return user, role
+        return user, role, int(token['exp'])
 
     @database_sync_to_async
     def _get_accessible_room(self, user_id, role):
@@ -108,6 +121,22 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
         if room is None or user is None or not can_access_room_for(room, user, role):
             return None
         return room
+
+    @database_sync_to_async
+    def _still_authorized(self):
+        user = CustomUser.objects.filter(pk=self.user.pk).first()
+        room = (
+            ChatRoom.objects
+            .select_related('order', 'mechanic')
+            .filter(pk=self.room.pk)
+            .first()
+        )
+        return bool(
+            user
+            and room
+            and user.has_role(self.active_role)
+            and can_access_room_for(room, user, self.active_role)
+        )
 
     @database_sync_to_async
     def _create_message(self, text):
@@ -126,6 +155,9 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
         }
 
     async def chat_message(self, event):
+        if self.token_expires_at is None or timezone.now().timestamp() >= self.token_expires_at:
+            await self.close(code=4401)
+            return
         await self.send_json({
             'type': 'message',
             'message': event['message'],
