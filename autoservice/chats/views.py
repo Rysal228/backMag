@@ -1,5 +1,5 @@
 from django.shortcuts import get_object_or_404
-from rest_framework import permissions, status
+from rest_framework import permissions, serializers, status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -68,7 +68,12 @@ class ChatMessagesView(APIView):
         if before:
             queryset = queryset.filter(created_at__lt=before)
 
-        page_size = min(max(int(request.query_params.get('limit', 50)), 1), 100)
+        try:
+            page_size = int(request.query_params.get('limit', 50))
+        except (TypeError, ValueError):
+            raise serializers.ValidationError({'limit': 'Параметр limit должен быть числом.'})
+        if page_size < 1 or page_size > 100:
+            raise serializers.ValidationError({'limit': 'Параметр limit должен быть от 1 до 100.'})
         messages = list(queryset[:page_size])
         messages.reverse()
         return Response({
