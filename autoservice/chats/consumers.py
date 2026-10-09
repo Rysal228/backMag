@@ -22,6 +22,10 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     async def receive_json(self, content, **kwargs):
+        if not isinstance(content, dict):
+            await self._send_error('invalid_event', 'Событие должно быть JSON-объектом.')
+            return
+
         if self.user is None:
             await self._authenticate(content)
             return
@@ -133,6 +137,7 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
         )
         return bool(
             user
+            and user.is_active
             and room
             and user.has_role(self.active_role)
             and can_access_room_for(room, user, self.active_role)
