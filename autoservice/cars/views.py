@@ -153,7 +153,18 @@ class CarViewSet(viewsets.ModelViewSet):
 
         orders = (
             car.orders
-            .select_related('car__brand', 'car__model', 'work_type', 'status', 'work_status')
+            .select_related(
+                'car__brand',
+                'car__model',
+                'status',
+                'work_status',
+                'payment_status',
+                'customer',
+                'busy_slot',
+            )
+            .prefetch_related(
+                'works__work_type',
+            )
             .filter(customer=request.user)
             .order_by('-created_at')
         )
