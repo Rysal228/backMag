@@ -56,10 +56,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'daphne',
+    'channels',
     'users.apps.UsersConfig',
     'cars.apps.CarsConfig',
     'orders.apps.OrdersConfig',
     'news.apps.NewsConfig',
+    'chats.apps.ChatsConfig',
     'corsheaders',
     'rest_framework',
     'rest_framework.authtoken',
@@ -196,3 +199,19 @@ SIMPLE_JWT = {
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
+
+
+# WebSocket chat: configure REDIS_URL in deployment to share events between workers.
+REDIS_URL = os.environ.get('REDIS_URL')
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [REDIS_URL]},
+        },
+    }
+else:
+    # Convenient for local development; production should use Redis.
+    CHANNEL_LAYERS = {
+        'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'},
+    }
