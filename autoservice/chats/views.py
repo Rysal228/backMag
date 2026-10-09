@@ -1,3 +1,5 @@
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, serializers, status
 from rest_framework.exceptions import PermissionDenied
@@ -66,7 +68,8 @@ class ChatMessagesView(APIView):
         queryset = room.messages.select_related('sender').order_by('-created_at', '-id')
         before = request.query_params.get('before')
         if before:
-            queryset = queryset.filter(created_at__lt=before)
+            before_value = serializers.DateTimeField().run_validation(before)
+            queryset = queryset.filter(created_at__lt=before_value)
 
         try:
             page_size = int(request.query_params.get('limit', 50))
@@ -95,6 +98,12 @@ class ChatMessagesView(APIView):
             room=room,
             sender=request.user,
             text=serializer.validated_data['text'],
+        )
+        message_data = ChatMessageSerializer(message).data
+        message_data['roomId'] = str(room.pk)
+        async_to_sync(get_channel_layer().group_send)(
+            f'chat_{room.pk.hex}',
+            {'type': 'chat.message', 'message': message_data},
         )
         return Response(
             ChatMessageSerializer(message).data,
