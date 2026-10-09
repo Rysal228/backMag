@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import viewsets, permissions, status
 from rest_framework.exceptions import ValidationError
 from .models import UserRole
@@ -34,7 +35,40 @@ class CustomUserViewSet(viewsets.ReadOnlyModelViewSet):
                 'role': 'Invalid user role.',
             })
 
-        return queryset.filter(role_assignments__role=role).distinct()
+        queryset = queryset.filter(role_assignments__role=role).distinct()
+
+        if role != UserRole.MECHANIC:
+            return queryset
+
+        search = self.request.query_params.get('search', '').strip()
+        mechanic_ids = [
+            value.strip()
+            for value in self.request.query_params.get('ids', '').split(',')
+            if value.strip()
+        ]
+
+        if not search and not mechanic_ids:
+            return queryset.none()
+
+        matching_users = Q()
+        if search:
+            for term in search.split():
+                term_query = (
+                    Q(first_name__icontains=term)
+                    | Q(last_name__icontains=term)
+                    | Q(patronymic__icontains=term)
+                )
+                digits = ''.join(character for character in term if character.isdigit())
+                if digits:
+                    term_query |= Q(phone__icontains=digits)
+                matching_users &= term_query
+
+        if mechanic_ids:
+            queryset = queryset.filter(Q(id__in=mechanic_ids) | matching_users)
+        else:
+            queryset = queryset.filter(matching_users)
+
+        return queryset.order_by('last_name', 'first_name', 'patronymic')[:20]
 
 
 class ProfileCustomUserView(APIView):
