@@ -82,6 +82,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'autoservice.urls'
+ASGI_APPLICATION = 'autoservice.asgi.application'
 
 TEMPLATES = [
     {
