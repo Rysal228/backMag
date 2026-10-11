@@ -157,6 +157,7 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
             'senderName': self.user.get_full_name() or self.user.phone,
             'text': message.text,
             'createdAt': message.created_at.isoformat(),
+            'attachments': [],
         }
 
     async def chat_message(self, event):
