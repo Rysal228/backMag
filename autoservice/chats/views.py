@@ -108,7 +108,7 @@ class ChatMessagesView(APIView):
             attachment = ChatAttachment.objects.create(
                 message=message,
                 file=uploaded,
-                original_name=Path(uploaded.name).name[:255],
+                original_name=Path(uploaded.name.replace('\\\\', '/')).name[:255],
                 content_type=uploaded.detected_chat_content_type,
                 size=uploaded.size,
             )
