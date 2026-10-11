@@ -141,7 +141,7 @@ class ChatAttachmentDownloadView(APIView):
         except (FileNotFoundError, OSError):
             raise Http404('Файл не найден.')
 
-        safe_name = Path(attachment.original_name).name.replace('"', '')
+        safe_name = Path(attachment.original_name.replace(chr(92), '/')).name.replace('"', '')
         response = FileResponse(
             file_handle,
             as_attachment=True,
