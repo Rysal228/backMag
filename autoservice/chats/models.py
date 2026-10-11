@@ -3,6 +3,7 @@ import uuid
 from django.db import models
 from django.db.models import Q
 
+from chats.storage import PrivateChatAttachmentStorage
 from orders.models import Order
 from users.models import CustomUser
 
@@ -99,7 +100,10 @@ class ChatAttachment(models.Model):
         related_name='attachments',
         verbose_name='Сообщение',
     )
-    file = models.FileField(upload_to='chat_attachments/%Y/%m/')
+    file = models.FileField(
+        upload_to='chat_attachments/%Y/%m/',
+        storage=PrivateChatAttachmentStorage(),
+    )
     original_name = models.CharField(max_length=255, verbose_name='Имя файла')
     content_type = models.CharField(max_length=100, verbose_name='Тип содержимого')
     size = models.PositiveBigIntegerField(verbose_name='Размер, байт')
