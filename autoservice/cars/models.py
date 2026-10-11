@@ -46,13 +46,6 @@ class Car(models.Model):
     class Meta:
         verbose_name = 'Автомобиль'
         verbose_name_plural = 'Автомобили'
-        constraints = [
-            models.UniqueConstraint(
-                condition=Q(vin__isnull=False) & ~Q(vin=''),
-                fields=('vin',),
-                name='unique_car_vin',
-            ),
-        ]
 
     id = models.UUIDField(
         primary_key=True,
@@ -102,6 +95,10 @@ class Car(models.Model):
         default=False,
         verbose_name='Архивный',
     )
+
+    @property
+    def status(self):
+        return 'archived' if self.is_archived else 'active'
 
     def __str__(self):
         return f'{self.brand} {self.model} ({self.plate_number})'

@@ -4,16 +4,11 @@ from datetime import timedelta
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 from users.models import CustomUser, UserRole
 from cars.models import Car
-
-
-class StatusAppearance(models.TextChoices):
-    POSITIVE = 'positive', 'Положительный'
-    WARNING = 'warning', 'Предупреждение'
-    NEGATIVE = 'negative', 'Отрицательный'
 
 
 class OrderFilterKey(models.TextChoices):
@@ -68,17 +63,17 @@ class WorkType(models.Model):
 
 
 class OrderStatus(models.Model):
+    class Code(models.TextChoices):
+        UNDER_REVIEW = 'under_review', 'На рассмотрении'
+        IN_PROGRESS = 'in_progress', 'В работе'
+        COMPLETED = 'completed', 'Завершен'
+
     class Meta:
         verbose_name = 'Статус заказа'
         verbose_name_plural = 'Статусы заказов'
 
+    code = models.CharField(max_length=50, unique=True, null=True, blank=True)
     name = models.CharField(max_length=100, unique=True)
-    appearance = models.CharField(
-        verbose_name='Внешний вид статуса',
-        max_length=20,
-        choices=StatusAppearance.choices,
-        default=StatusAppearance.WARNING,
-    )
     is_initial = models.BooleanField(verbose_name='Начальный статус', default=False)
     requires_payment = models.BooleanField(verbose_name='Требует оплаты', default=False)
 
@@ -89,22 +84,36 @@ class OrderStatus(models.Model):
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
 
 class WorkStatus(models.Model):
+    class Code(models.TextChoices):
+        WAITING_MANAGER_REVIEW = 'waiting_manager_review', 'Ожидание проверки менеджером'
+        MANAGER_REVIEW = 'manager_review', 'Проверяется менеджером'
+        WAITING_ARRIVAL = 'waiting_arrival', 'Ожидание прибытия авто в сервис'
+        INTAKE = 'intake', 'Приёмка'
+        OWNER_APPROVAL = 'owner_approval', 'Согласование с владельцем'
+        WAITING_PAYMENT = 'waiting_payment', 'Ожидание оплаты'
+        EXECUTION = 'execution', 'Специалисты выполняют заказ'
+        OWNER_VISIT = 'owner_visit', 'Владелец должен явиться в сервис'
+        REFUSED = 'refused', 'Отказано'
+
     class Meta:
         verbose_name = 'Статус работы'
         verbose_name_plural = 'Статусы работ'
 
+    code = models.CharField(max_length=50, unique=True, null=True, blank=True)
     name = models.CharField(max_length=100, unique=True)
-    appearance = models.CharField(
-        verbose_name='Внешний вид статуса',
-        max_length=20,
-        choices=StatusAppearance.choices,
-        default=StatusAppearance.WARNING,
-    )
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class AppointmentSettings(models.Model):
@@ -264,6 +273,102 @@ class BusySlot(models.Model):
         return f'{self.date:%d.%m.%Y} {self.start_time:%H:%M}–{self.end_time:%H:%M}{order}'
 
 
+class OrderWork(models.Model):
+    class Meta:
+        verbose_name = 'Работа в заказе'
+        verbose_name_plural = 'Работы в заказах'
+        ordering = ('id',)
+        constraints = [
+            models.UniqueConstraint(
+                fields=('order', 'work_type'),
+                condition=Q(work_type__isnull=False),
+                name='unique_catalog_work_per_order',
+            ),
+        ]
+
+    order = models.ForeignKey(
+        'Order',
+        on_delete=models.CASCADE,
+        related_name='works',
+        verbose_name='Заказ',
+    )
+    work_type = models.ForeignKey(
+        WorkType,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='order_works',
+        verbose_name='Тип работ из справочника',
+    )
+    name = models.CharField(
+        max_length=100,
+        verbose_name='Название работы',
+    )
+    price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        verbose_name='Стоимость',
+    )
+
+    def save(self, *args, **kwargs):
+        if self.work_type_id:
+            self.name = self.work_type.name
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.name} — {self.price}'
+
+
+class PaymentStatus(models.Model):
+    class Code(models.TextChoices):
+        UNPAID = 'unpaid', 'Не оплачено'
+        PAID = 'paid', 'Оплачено'
+
+    class Meta:
+        verbose_name = 'Статус оплаты'
+        verbose_name_plural = 'Статусы оплаты'
+
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
+
+
+class OrderStatusTransition(models.Model):
+    def clean(self):
+        if self.role != UserRole.ADMIN:
+            raise ValidationError({'role': 'Переходами статусов заказа может управлять только администратор.'})
+
+    class Meta:
+        verbose_name = 'Переход статуса заказа'
+        verbose_name_plural = 'Переходы статусов заказа'
+        constraints = [models.UniqueConstraint(fields=('from_status', 'to_status', 'role'), name='unique_order_status_transition_role')]
+
+    from_status = models.ForeignKey(OrderStatus, on_delete=models.CASCADE, related_name='outgoing_transitions')
+    to_status = models.ForeignKey(OrderStatus, on_delete=models.CASCADE, related_name='incoming_transitions')
+    role = models.CharField(max_length=20, choices=UserRole.choices)
+    enabled = models.BooleanField(default=True)
+
+
+class WorkStatusTransition(models.Model):
+    def clean(self):
+        if self.role != UserRole.ADMIN:
+            raise ValidationError({'role': 'Переходами статусов работ может управлять только администратор.'})
+
+    class Meta:
+        verbose_name = 'Переход статуса работы'
+        verbose_name_plural = 'Переходы статусов работы'
+        constraints = [models.UniqueConstraint(fields=('from_status', 'to_status', 'role'), name='unique_work_status_transition_role')]
+
+    from_status = models.ForeignKey(WorkStatus, on_delete=models.CASCADE, related_name='outgoing_transitions')
+    to_status = models.ForeignKey(WorkStatus, on_delete=models.CASCADE, related_name='incoming_transitions')
+    role = models.CharField(max_length=20, choices=UserRole.choices)
+    enabled = models.BooleanField(default=True)
+
+
 class Order(models.Model):
     class Meta:
         verbose_name = 'Заказ'
@@ -272,19 +377,27 @@ class Order(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     order_number = models.CharField(max_length=50, unique=True)
     customer = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='orders')
+    mechanics = models.ManyToManyField(
+        CustomUser,
+        related_name='assigned_orders',
+        blank=True,
+        verbose_name='Специалисты',
+    )
     car = models.ForeignKey(Car, on_delete=models.PROTECT, related_name='orders')
     car_brand_snapshot = models.CharField(max_length=100)
     car_model_snapshot = models.CharField(max_length=100)
     car_year_snapshot = models.PositiveIntegerField()
     car_vin_snapshot = models.CharField(max_length=64, null=True, blank=True)
     car_plate_number_snapshot = models.CharField(max_length=20, null=True, blank=True)
-    work_type = models.ForeignKey(WorkType, on_delete=models.PROTECT)
     status = models.ForeignKey(OrderStatus, on_delete=models.PROTECT)
     work_status = models.ForeignKey(WorkStatus, on_delete=models.PROTECT, null=True, blank=True)
+    payment_status = models.ForeignKey(PaymentStatus, on_delete=models.PROTECT, null=True, blank=True, related_name='orders')
     appointment_at = models.DateTimeField(null=True, blank=True)
     description = models.TextField(blank=True)
-    price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'Заказ №{self.order_number}'
 
     def save(self, *args, **kwargs):
         self.full_clean()

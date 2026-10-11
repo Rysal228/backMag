@@ -24,7 +24,7 @@ class CarAdmin(admin.ModelAdmin):
         'model',
         'year',
         'owner',
-        'is_archived',
+        'status',
     )
 
     search_fields = (

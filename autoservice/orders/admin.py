@@ -1,3 +1,4 @@
+from users.models import CustomUser, UserRole
 from django.contrib import admin
 from django.db import transaction
 
@@ -11,9 +12,12 @@ from orders.models import (
     WeekdaySchedule,
     WorkStatus,
     WorkType,
+    OrderWork,
+    PaymentStatus,
+    OrderStatusTransition,
+    WorkStatusTransition,
 )
 from orders.services.appointment_availability import AppointmentAvailabilityService
-
 
 
 @admin.register(OrderFilterPermission)
@@ -31,20 +35,49 @@ class WorkTypeAdmin(admin.ModelAdmin):
     search_fields = ('name',)
 
 
+@admin.register(OrderWork)
+class OrderWorkAdmin(admin.ModelAdmin):
+    list_display = ('order', 'name', 'source_display', 'work_type', 'price')
+    list_filter = ('work_type',)
+    search_fields = ('order__order_number', 'name', 'work_type__name')
+
+    @admin.display(description='Источник')
+    def source_display(self, obj):
+        return 'Справочник' if obj.work_type_id else 'Кастомная'
+
+
 @admin.register(OrderStatus)
 class OrderStatusAdmin(admin.ModelAdmin):
-    list_display = ('name', 'appearance', 'is_initial', 'requires_payment')
-    list_filter = ('appearance', 'is_initial', 'requires_payment')
+    list_display = ('code', 'name', 'is_initial', 'requires_payment')
+    list_editable = ('name',)
+    list_filter = ('is_initial', 'requires_payment')
     search_fields = ('name',)
 
 
 @admin.register(WorkStatus)
 class WorkStatusAdmin(admin.ModelAdmin):
-    list_display = ('name', 'appearance')
-    list_filter = ('appearance',)
+    list_display = ('code', 'name')
+    list_editable = ('name',)
     search_fields = ('name',)
 
 
+
+@admin.register(PaymentStatus)
+class PaymentStatusAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name')
+    list_editable = ('name',)
+
+
+@admin.register(OrderStatusTransition)
+class OrderStatusTransitionAdmin(admin.ModelAdmin):
+    list_display = ('from_status', 'to_status', 'role', 'enabled')
+    list_filter = ('role', 'enabled')
+
+
+@admin.register(WorkStatusTransition)
+class WorkStatusTransitionAdmin(admin.ModelAdmin):
+    list_display = ('from_status', 'to_status', 'role', 'enabled')
+    list_filter = ('role', 'enabled')
 @admin.register(AppointmentSettings)
 class AppointmentSettingsAdmin(admin.ModelAdmin):
     list_display = ('appointment_duration', 'slot_interval')
@@ -78,11 +111,52 @@ class BusySlotAdmin(admin.ModelAdmin):
     ordering = ('date', 'start_time')
 
 
+class OrderWorkInline(admin.TabularInline):
+    model = OrderWork
+    extra = 0
+    fields = ('name', 'source_display', 'work_type', 'price')
+    readonly_fields = ('source_display',)
+
+    @admin.display(description='Источник')
+    def source_display(self, obj):
+        if not obj.pk:
+            return 'Определится после сохранения'
+        return 'Справочник' if obj.work_type_id else 'Кастомная'
+
+
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('order_number', 'customer', 'car', 'work_type', 'status', 'work_status', 'appointment_at', 'price')
-    list_filter = ('status', 'work_status', 'work_type')
-    search_fields = ('order_number', 'customer__phone', 'car__plate_number')
+    list_display = ('order_number', 'customer', 'car', 'mechanics_display', 'work_types_display', 'status', 'work_status', 'appointment_at', 'total_price_display')
+    list_filter = ('status', 'work_status', 'works__work_type', 'mechanics')
+    search_fields = (
+        'order_number', 'customer__phone', 'car__plate_number',
+        'mechanics__phone', 'mechanics__last_name', 'mechanics__first_name',
+    )
+    filter_horizontal = ('mechanics',)
+    inlines = (OrderWorkInline,)
+
+    @admin.display(description='Итого')
+    def total_price_display(self, obj):
+        return sum((work.price for work in obj.works.all()), 0)
+
+    @admin.display(description='Специалисты')
+    def mechanics_display(self, obj):
+        return ', '.join(
+            mechanic.get_full_name() or mechanic.phone
+            for mechanic in obj.mechanics.all()
+        )
+
+    @admin.display(description='Типы работ')
+    def work_types_display(self, obj):
+        return ', '.join(obj.works.values_list('name', flat=True))
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == 'mechanics':
+            kwargs['queryset'] = CustomUser.objects.filter(
+                role_assignments__role=UserRole.MECHANIC,
+            ).distinct()
+
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     @transaction.atomic
     def save_model(self, request, obj, form, change):
@@ -94,3 +168,4 @@ class OrderAdmin(admin.ModelAdmin):
 
         if not change or previous_appointment != obj.appointment_at:
             AppointmentAvailabilityService.sync_order_busy_slot(obj)
+
