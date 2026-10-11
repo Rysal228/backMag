@@ -104,16 +104,14 @@ class ChatMessagesView(APIView):
             text=validated.get('text', ''),
         )
 
-        attachment_data = []
         for uploaded in validated.get('files', []):
             attachment = ChatAttachment.objects.create(
                 message=message,
                 file=uploaded,
                 original_name=Path(uploaded.name).name[:255],
-                content_type=uploaded.content_type or 'application/octet-stream',
+                content_type=uploaded.detected_chat_content_type,
                 size=uploaded.size,
             )
-            attachment_data.append(attachment)
 
         message_data = ChatMessageSerializer(message).data
         message_data['roomId'] = str(room.pk)
