@@ -102,10 +102,8 @@ class ChatAttachmentUploadField(serializers.FileField):
         if not signatures.get(extension, False):
             self.fail('invalid_content')
 
+        uploaded.detected_chat_content_type = ALLOWED_ATTACHMENT_TYPES[extension][0]
         return uploaded
-
-    def validate_empty_values(self, data):
-        return super().validate_empty_values(data)
 
 
 class SendChatMessageSerializer(serializers.Serializer):
