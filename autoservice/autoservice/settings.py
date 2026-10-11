@@ -200,6 +200,7 @@ SIMPLE_JWT = {
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
+CHAT_ATTACHMENT_ROOT = os.environ.get('CHAT_ATTACHMENT_ROOT', str(BASE_DIR / 'private_chat_attachments'))
 
 
 # WebSocket chat: configure REDIS_URL in deployment to share events between workers.
