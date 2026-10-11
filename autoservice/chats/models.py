@@ -76,7 +76,7 @@ class ChatMessage(models.Model):
         related_name='chat_messages',
         verbose_name='Отправитель',
     )
-    text = models.TextField(max_length=5000, verbose_name='Сообщение')
+    text = models.TextField(max_length=5000, blank=True, verbose_name='Сообщение')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -89,3 +89,26 @@ class ChatMessage(models.Model):
 
     def __str__(self):
         return f'{self.sender}: {self.text[:50]}'
+
+
+class ChatAttachment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    message = models.ForeignKey(
+        ChatMessage,
+        on_delete=models.CASCADE,
+        related_name='attachments',
+        verbose_name='Сообщение',
+    )
+    file = models.FileField(upload_to='chat_attachments/%Y/%m/')
+    original_name = models.CharField(max_length=255, verbose_name='Имя файла')
+    content_type = models.CharField(max_length=100, verbose_name='Тип содержимого')
+    size = models.PositiveBigIntegerField(verbose_name='Размер, байт')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Вложение сообщения'
+        verbose_name_plural = 'Вложения сообщений'
+        ordering = ('created_at',)
+
+    def __str__(self):
+        return self.original_name
