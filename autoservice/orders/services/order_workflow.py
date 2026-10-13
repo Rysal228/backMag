@@ -117,6 +117,9 @@ class OrderWorkflowService:
 
         if order.status.code == OrderStatus.Code.IN_PROGRESS:
             if order.work_status and order.work_status.code in (
+                WorkStatus.Code.WAITING_ARRIVAL,
+                WorkStatus.Code.INTAKE,
+                WorkStatus.Code.OWNER_APPROVAL,
                 WorkStatus.Code.EXECUTION,
                 WorkStatus.Code.REFUSED,
             ):
@@ -167,9 +170,14 @@ class OrderWorkflowService:
                 order.refusal_reason = refusal_reason.strip()
             elif current_order_code == OrderStatus.Code.IN_PROGRESS:
                 if is_refusal:
-                    if current_work_code != WorkStatus.Code.EXECUTION:
+                    if current_work_code not in (
+                        WorkStatus.Code.WAITING_ARRIVAL,
+                        WorkStatus.Code.INTAKE,
+                        WorkStatus.Code.OWNER_APPROVAL,
+                        WorkStatus.Code.EXECUTION,
+                    ):
                         raise ValidationError({
-                            'status': 'Отказать в заказе можно только во время выполнения работ.'
+                            'status': 'На текущем этапе заказа отказ недоступен.'
                         })
                     target_work_code = WorkStatus.Code.REFUSED
                     order.refusal_reason = refusal_reason.strip()
