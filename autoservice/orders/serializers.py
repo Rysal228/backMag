@@ -232,6 +232,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'permissions',
             'price',
             'createdAt',
+            'refusalReason',
         )
 
     def to_representation(self, instance):
