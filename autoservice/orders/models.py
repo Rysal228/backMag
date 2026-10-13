@@ -395,7 +395,7 @@ class Order(models.Model):
     appointment_at = models.DateTimeField(null=True, blank=True)
     description = models.TextField(blank=True)
     refusal_reason = models.TextField(blank=True, default='')
-    created_at = models.DateTimeField(auto_now_add=True
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f'Заказ №{self.order_number}'
