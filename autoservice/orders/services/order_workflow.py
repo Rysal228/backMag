@@ -2,6 +2,7 @@ from django.db import transaction
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from orders.models import (
+    BusySlot,
     Order,
     OrderStatus,
     OrderStatusTransition,
@@ -138,9 +139,8 @@ class OrderWorkflowService:
 
     @classmethod
     @transaction.atomic
-    def transition_status(cls, order: Order, user, to_status: OrderStatus):
+    def transition_status(cls, order: Order, user, to_status: OrderStatus, refusal_reason: str = ''):
         role = cls._role(user)
-
         if not OrderStatusTransition.objects.filter(
             from_status=order.status,
             to_status=to_status,
@@ -149,29 +149,47 @@ class OrderWorkflowService:
         ).exists():
             raise ValidationError({'status': 'Переход заказа в выбранный статус недоступен.'})
 
+        current_order_code = order.status.code
         current_work_code = order.work_status.code if order.work_status else None
-        target_work_code = None
+        is_refusal = bool(refusal_reason and refusal_reason.strip())
 
-        if (
-            order.status.code == OrderStatus.Code.UNDER_REVIEW
+        if to_status.code == OrderStatus.Code.COMPLETED:
+            if current_order_code == OrderStatus.Code.UNDER_REVIEW:
+                if current_work_code != WorkStatus.Code.MANAGER_REVIEW:
+                    raise ValidationError({
+                        'status': 'Отказать в заказе можно только на этапе проверки менеджером.'
+                    })
+                if not is_refusal:
+                    raise ValidationError({
+                        'refusalReason': 'Укажите причину отказа от заказа.'
+                    })
+                target_work_code = WorkStatus.Code.REFUSED
+                order.refusal_reason = refusal_reason.strip()
+            elif current_order_code == OrderStatus.Code.IN_PROGRESS:
+                if is_refusal:
+                    if current_work_code != WorkStatus.Code.EXECUTION:
+                        raise ValidationError({
+                            'status': 'Отказать в заказе можно только во время выполнения работ.'
+                        })
+                    target_work_code = WorkStatus.Code.REFUSED
+                    order.refusal_reason = refusal_reason.strip()
+                elif current_work_code == WorkStatus.Code.EXECUTION:
+                    target_work_code = WorkStatus.Code.OWNER_VISIT
+                elif current_work_code == WorkStatus.Code.REFUSED and order.refusal_reason:
+                    target_work_code = WorkStatus.Code.REFUSED
+                else:
+                    raise ValidationError({
+                        'status': 'Текущий статус работы не позволяет завершить заказ.'
+                    })
+            else:
+                raise ValidationError({'status': 'Заказ уже завершён.'})
+        elif (
+            current_order_code == OrderStatus.Code.UNDER_REVIEW
             and to_status.code == OrderStatus.Code.IN_PROGRESS
             and current_work_code == WorkStatus.Code.MANAGER_REVIEW
         ):
             target_work_code = WorkStatus.Code.WAITING_ARRIVAL
-        elif (
-            order.status.code == OrderStatus.Code.UNDER_REVIEW
-            and to_status.code == OrderStatus.Code.COMPLETED
-            and current_work_code == WorkStatus.Code.MANAGER_REVIEW
-        ):
-            target_work_code = WorkStatus.Code.REFUSED
-        elif (
-            order.status.code == OrderStatus.Code.IN_PROGRESS
-            and to_status.code == OrderStatus.Code.COMPLETED
-            and current_work_code == WorkStatus.Code.EXECUTION
-        ):
-            target_work_code = WorkStatus.Code.OWNER_VISIT
-
-        if target_work_code is None:
+        else:
             raise ValidationError({
                 'status': 'Текущий статус работы не позволяет выполнить выбранный переход заказа.'
             })
@@ -179,7 +197,10 @@ class OrderWorkflowService:
         target_work = WorkStatus.objects.get(code=target_work_code)
         order.status = to_status
         order.work_status = target_work
-        order.save(update_fields=('status', 'work_status'))
+        order.save(update_fields=('status', 'work_status', 'refusal_reason'))
+        if target_work_code == WorkStatus.Code.REFUSED:
+            # Keep the order as historical data, but release its appointment slot.
+            BusySlot.objects.filter(order=order).delete()
         return order
 
     @classmethod
