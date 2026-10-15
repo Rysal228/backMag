@@ -8,6 +8,8 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from integrations import OneCTestConnectionView
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -16,6 +18,7 @@ urlpatterns = [
     path('api/v1/orders/', include('orders.urls')),
     path('api/v1/chats/', include('chats.urls')),
     path('api/v1/news/', include('news.urls')),
+    path('api/v1/integrations/1c/test/', OneCTestConnectionView.as_view(), name='onec-test'),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
