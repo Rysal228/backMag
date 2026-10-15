@@ -20,7 +20,6 @@ class OneCTestConnectionView(APIView):
     """Authenticated backend proxy for the configured 1C test endpoint."""
 
     permission_classes = [permissions.IsAuthenticated]
-    authentication_classes = None  # Use the project's default DRF authentication classes.
 
     def get(self, request):
         try:
