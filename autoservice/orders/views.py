@@ -119,7 +119,12 @@ class OrderViewSet(viewsets.ModelViewSet):
         status = OrderStatus.objects.filter(pk=status_id).first()
         if status is None:
             raise serializers.ValidationError({'statusId': 'Статус заказа не найден.'})
-        OrderWorkflowService.transition_status(order, request, status)
+        refusal_reason = request.data.get('refusalReason', '')
+        if refusal_reason is None:
+            refusal_reason = ''
+        if not isinstance(refusal_reason, str):
+            raise serializers.ValidationError({'refusalReason': 'Причина отказа должна быть текстом.'})
+        OrderWorkflowService.transition_status(order, request, status, refusal_reason=refusal_reason)
         return Response(self.get_serializer(order).data)
 
     @action(detail=True, methods=['post'], url_path='transition-work-status')

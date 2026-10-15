@@ -19,16 +19,17 @@ if sys.platform == 'win32':
 from inspect import CORO_SUSPENDED
 from pathlib import Path
 from datetime import timedelta
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
+load_dotenv(BASE_DIR / ".env")
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-&#aisvpyqmt6#704owjvwght0o3ifg-d^s1w+_(zj^d48wb0-c'
+SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 MAX_BOT_TOKEN = os.environ['MAX_BOT_TOKEN']
 MAX_BOT_API_BASE_URL = os.environ.get(
     'MAX_BOT_API_BASE_URL',

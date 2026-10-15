@@ -394,6 +394,7 @@ class Order(models.Model):
     payment_status = models.ForeignKey(PaymentStatus, on_delete=models.PROTECT, null=True, blank=True, related_name='orders')
     appointment_at = models.DateTimeField(null=True, blank=True)
     description = models.TextField(blank=True)
+    refusal_reason = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

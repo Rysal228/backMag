@@ -190,6 +190,7 @@ class OrderSerializer(serializers.ModelSerializer):
     status = OrderStatusInlineSerializer(read_only=True)
     workStatus = WorkStatusInlineSerializer(source='work_status', read_only=True, allow_null=True)
     appointmentAt = serializers.DateTimeField(source='appointment_at')
+    refusalReason = serializers.CharField(source='refusal_reason', required=False, allow_blank=True)
     createdAt = serializers.DateTimeField(source='created_at', read_only=True)
     price = serializers.SerializerMethodField()
 
@@ -213,6 +214,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'permissions',
             'appointmentAt',
             'description',
+            'refusalReason',
             'price',
             'createdAt',
         )
@@ -230,6 +232,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'permissions',
             'price',
             'createdAt',
+            'refusalReason',
         )
 
     def to_representation(self, instance):
@@ -238,6 +241,11 @@ class OrderSerializer(serializers.ModelSerializer):
 
         if not request or request.active_role not in ('mechanic', 'admin'):
             data.pop('ownerPhone', None)
+
+        if request and request.active_role == UserRole.MECHANIC:
+            data.pop('price', None)
+            for work in data.get('works', []):
+                work.pop('price', None)
 
         return data
 
