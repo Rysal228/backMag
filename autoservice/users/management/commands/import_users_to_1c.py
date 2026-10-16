@@ -74,14 +74,15 @@ class Command(BaseCommand):
             last_name = user.last_name.strip()
             patronymic = (user.patronymic or "").strip()
             messenger_id = user.messenger_user_id or ""
-            if (not first_name or len(first_name) > 150 or
-                    not last_name or len(last_name) > 150 or
+            # Django allows accounts with incomplete profiles (for example MAX login).
+            # 1C stores an empty name and uses the phone as display name.
+            if (len(first_name) > 150 or len(last_name) > 150 or
                     len(patronymic) > 150 or len(messenger_id) > 255):
                 failed += 1
                 self.stderr.write(
                     f"INVALID PROFILE for phone={phone}: "
-                    "1C requires non-empty first/last names (max 150 chars); "
-                    "patronymic max 150; messengerUserId max 255."
+                    "1C allows empty names; firstName/lastName/patronymic "
+                    "max 150 chars; messengerUserId max 255."
                 )
                 if options["stop_on_error"]:
                     break
