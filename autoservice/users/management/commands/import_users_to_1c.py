@@ -15,6 +15,11 @@ class Command(BaseCommand):
         parser.add_argument("--phone", help="Import just one user (7XXXXXXXXXX, optionally +)")
         parser.add_argument("--timeout", type=float, default=15.0, help="Seconds per HTTP request")
         parser.add_argument("--stop-on-error", action="store_true", help="Stop at the first error")
+        parser.add_argument(
+            "--allow-unauthenticated-internal",
+            action="store_true",
+            help="Permit --execute without Basic auth only for http://host.docker.internal:8081",
+        )
 
     def handle(self, *args, **options):
         base_url = os.environ.get("ONEC_BASE_URL", "http://host.docker.internal:8081").rstrip("/")
@@ -40,8 +45,28 @@ class Command(BaseCommand):
         if not users:
             raise CommandError("No users found. Check filters/database.")
 
-        if options["execute"] and (not api_user or not api_password):
-            raise CommandError("Set ONEC_API_USER and ONEC_API_PASSWORD before --execute")
+        if bool(api_user) != bool(api_password):
+            raise CommandError(
+                "ONEC_API_USER and ONEC_API_PASSWORD must both be set or both be absent"
+            )
+
+        if options["execute"] and not (api_user and api_password):
+            if not options["allow_unauthenticated_internal"]:
+                raise CommandError(
+                    "Set ONEC_API_USER and ONEC_API_PASSWORD, or explicitly pass "
+                    "--allow-unauthenticated-internal for the internal 1C endpoint."
+                )
+            # Only the known, locally routed Apache service may be used without auth.
+            # Refuse a custom or public endpoint even with the opt-in flag.
+            if base_url != "http://host.docker.internal:8081":
+                raise CommandError(
+                    "--allow-unauthenticated-internal works only with "
+                    "ONEC_BASE_URL=http://host.docker.internal:8081"
+                )
+            self.stderr.write(self.style.WARNING(
+                "WARNING: writing to internal 1C without HTTP authentication. "
+                "Do not expose port 8081 beyond trusted local networks."
+            ))
 
         session = requests.Session()
         if api_user and api_password:
