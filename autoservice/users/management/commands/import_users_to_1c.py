@@ -70,14 +70,31 @@ class Command(BaseCommand):
                     break
                 continue
 
+            first_name = user.first_name.strip()
+            last_name = user.last_name.strip()
+            patronymic = (user.patronymic or "").strip()
+            messenger_id = user.messenger_user_id or ""
+            if (not first_name or len(first_name) > 150 or
+                    not last_name or len(last_name) > 150 or
+                    len(patronymic) > 150 or len(messenger_id) > 255):
+                failed += 1
+                self.stderr.write(
+                    f"INVALID PROFILE for phone={phone}: "
+                    "1C requires non-empty first/last names (max 150 chars); "
+                    "patronymic max 150; messengerUserId max 255."
+                )
+                if options["stop_on_error"]:
+                    break
+                continue
+
             payload = {
                 "externalId": str(user.pk),
                 "phone": phone,
-                "firstName": user.first_name,
-                "lastName": user.last_name,
-                "patronymic": user.patronymic or "",
+                "firstName": first_name,
+                "lastName": last_name,
+                "patronymic": patronymic,
                 "birthday": user.birthday.isoformat() if user.birthday else None,
-                "messengerUserId": user.messenger_user_id or "",
+                "messengerUserId": messenger_id,
                 "isActive": bool(user.is_active),
                 "roles": roles,
             }
@@ -92,12 +109,19 @@ class Command(BaseCommand):
                 response = session.put(url, json=payload, timeout=options["timeout"])
                 response.raise_for_status()
                 body = response.json()
-                remote = body.get("user", {})
+                if not isinstance(body, dict) or not isinstance(body.get("user"), dict):
+                    raise ValueError("1C response must contain a user JSON object")
+                remote = body["user"]
                 if (remote.get("phone") != phone or
                         remote.get("externalId") != str(user.pk) or
+                        remote.get("firstName") != first_name or
+                        remote.get("lastName") != last_name or
+                        remote.get("patronymic") != patronymic or
+                        remote.get("birthday") != payload["birthday"] or
+                        remote.get("messengerUserId") != messenger_id or
                         sorted(remote.get("roles", [])) != roles or
                         remote.get("isActive") != user.is_active):
-                    raise ValueError("1C response differs from source (phone, UUID, roles, or isActive)")
+                    raise ValueError("1C response differs from source user profile or roles")
             except (requests.RequestException, ValueError) as exc:
                 failed += 1
                 self.stderr.write(f"FAIL phone={phone}: {exc}")
