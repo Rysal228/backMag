@@ -122,7 +122,7 @@ class OneCUsersClientTests(SimpleTestCase):
         user = OneCUsersClient().get_user(PHONE)
         self.assertEqual(user["externalId"], UUID)
         self.assertEqual(request.call_args.args[0], "GET")
-        self.assertTrue(request.call_args.kwargs["url"].endswith("/" + PHONE))
+        self.assertTrue(request.call_args.args[1].endswith("/" + PHONE))
         self.assertFalse(request.call_args.kwargs["allow_redirects"])
 
     @patch.dict(os.environ, {
