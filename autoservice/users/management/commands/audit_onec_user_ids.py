@@ -43,6 +43,7 @@ class Command(BaseCommand):
         rows = get_user_model().objects.order_by("phone").values_list("pk", "phone")
         client = OneCUsersClient()
         processed = 0
+        succeeded = 0
         failed = 0
         observed_phones = set()
         native_to_legacy = {}
@@ -75,6 +76,7 @@ class Command(BaseCommand):
                 )
                 continue
 
+            succeeded += 1
             self.stdout.write(
                 f"OK phone={normalized} legacyDjangoId={legacy} onecId={native}"
             )
@@ -86,7 +88,7 @@ class Command(BaseCommand):
                 self.stderr.write(f"MISSING Django user phone={phone}")
 
         self.stdout.write(
-            f"Result: compared={processed}, ok={processed - (failed - (len(selected - observed_phones) if selected is not None else 0))}, errors={failed}"
+            f"Result: compared={processed}, ok={succeeded}, errors={failed}"
         )
         if failed:
             raise CommandError(
