@@ -1,6 +1,7 @@
 """Read/write user profiles through 1C; never persist profile data in Django."""
 
 import os
+from uuid import UUID
 from urllib.parse import quote
 
 import requests
@@ -63,6 +64,10 @@ class OneCUsersClient:
             )
 
         url = f"{self.base_url}/{self.path}/{quote(normalized, safe='')}"
+        return self._request_user_url(method, url, payload=payload)
+
+    def _request_user_url(self, method, url, payload=None):
+        """Single response/error handling path for phone and native-ID lookup."""
         auth = (self.api_user, self.api_password) if self.api_user else None
         try:
             response = requests.request(
@@ -128,6 +133,30 @@ class OneCUsersClient:
 
     def patch_user(self, phone, data):
         return self._request("PATCH", phone, payload=data)
+
+    def get_user_by_onec_id(self, onec_id):
+        """Fetch a 1C user using the intrinsic catalog-reference UUID, not phone."""
+        try:
+            native_id = str(UUID(str(onec_id)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise OneCUserServiceError(
+                "onec_invalid_identity", "Некорректный идентификатор 1С.",
+                status_code=400,
+            ) from exc
+
+        url = f"{self.base_url}/{self.path}/id/{native_id}"
+        user = self._request_user_url("GET", url)
+        try:
+            returned_native_id = UUID(str(user.get("onecId", "")))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise OneCUserServiceError(
+                "onec_invalid_response", "1С не вернула идентификатор ссылки."
+            ) from exc
+        if str(returned_native_id) != native_id:
+            raise OneCUserServiceError(
+                "onec_identity_mismatch", "Ответ 1С не соответствует запросу."
+            )
+        return user
 
 
     def list_mechanics(self, *, search="", ids=()):
