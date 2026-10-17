@@ -1,28 +1,38 @@
-# Список специалистов из 1С — постепенное переключение
+# Список специалистов: данные только из 1С
 
-**Цель:** существующий Angular `GET /api/v1/users/?role=mechanic&search=...&ids=...` должен возвращать специалистов из 1С, а не из Django ORM.
+Angular продолжает обращаться к `GET /api/v1/users/?role=mechanic&search=...&ids=...`.
+Django `CustomUserViewSet.list` при `role=mechanic` **всегда** запрашивает 1С:
+`GET /ServiceCar/hs/api/users/mechanics`. Ветка поиска/фильтрации специалистов
+из локальной базы удалена. Флаг `ONEC_MECHANICS_GATEWAY_ENABLED` больше не существует.
 
-## Важно перед развёртыванием
+В HTTP-сервисе 1С уже установлен и проверен обработчик `UserListMechanics`:
+он выбирает `Специалист` через регистр `РолиПользователей`, поддерживает
+`search`, `ids`, возвращает до 20 результатов. Прямой GET из контейнера
+Django ответил HTTP 200 с актуальным ФИО специалиста.
 
-Включение происходит **после** установки нового HTTP-обработчика 1С. Новое поведение выключено по умолчанию, чтобы не ломать рабочее приложение.
-
-1. Сделать резервную копию 1С.
-2. В Конфигураторе открыть HTTP-сервис `ServiceCarAPI`.
-3. Создать шаблон URL `/users/mechanics` (имя `Mechanics`), в нём метод `GET` (имя `GetMechanics`) с обработчиком `UserListMechanics`.
-4. Добавить новые функции в конец модуля HTTP-сервиса из `HTTPServices/ServiceCarAPI/Ext/Module.bsl`: `НайтиЦифрыВСтроке`, `СовпадаетПоискСпециалиста`, `UserListMechanics`; или заменить модуль выгрузкой с PR. Убедиться, что ранее настроенная запись пользователей остаётся рабочей.
-5. Проверить синтаксис конфигурации, обновить базу, при необходимости перепубликовать HTTP-сервис, затем проверить из Docker:
-   `docker compose exec backend python -c 'import requests; r=requests.get("http://host.docker.internal:8081/ServiceCar/hs/api/users/mechanics",params={"search":"Сер"},timeout=10); print(r.status_code, r.text[:1500])'`
-6. Только после подтверждения `HTTP 200` и массива специалистов выполнить обновление Django из master (сборка backend) и включить в Docker Compose `ONEC_MECHANICS_GATEWAY_ENABLED: "1"`; пересоздать контейнер `docker compose up -d --force-recreate backend`.
-7. Через Angular проверить выбор механика в заказе, поиск по имени, ввод телефона, включение уже выбранного UUID через `ids`, поиск после ручного изменения ФИО в 1С.
-
-Внешний Django API возвращает непосредственно массив, как прежде:
+Формат ответа Angular — непосредственно массив:
 `[{"id":"...","phone":"...","firstName":"...","lastName":"...","patronymic":"...","birthday":null}]`.
-Запросы с role, отличным от mechanic, пока продолжают использовать старый Django-код (это не конечная архитектура). Механик выбирается из регистра ролей 1С. Реальный контракт `PATCH /api/v1/users/profile/` не меняется.
 
-Новый 1С HTTP-endpoint является **только серверным**. Прямой публичный доступ не предусматривать; к постоянной эксплуатации требуется техническая HTTP-аутентификация. Это не заменяет проверку полномочий JWT в Django.
+Если 1С недоступна, Django не возвращается к локальному списку — отдаёт ошибку.
+Для списков других ролей и детализации пользователей без фильтра `role=mechanic`
+ещё используется Django. Связь специалистов в заказах по `CustomUser`
+пока тоже остаётся в Django; это следующий этап, а не часть перехода списков.
 
-## Тесты Django
+## Проверка после обновления backend
 
-`docker compose exec backend python manage.py test users.tests.test_onec_mechanics_gateway -v 2`
+```bash
+cd /opt/service-car/backend && git pull origin master
+cd /opt/service-car && docker compose up -d --build backend
+docker compose exec backend python manage.py test users.tests.test_onec_mechanics_gateway -v 2
+docker compose exec backend python -c 'import requests; r=requests.get("http://host.docker.internal:8081/ServiceCar/hs/api/users/mechanics",params={"search":"Серёга125"},timeout=10); print(r.status_code, r.text[:1000])'
+```
 
-Выбор механика в заказах пока всё ещё ссылается на `CustomUser` в PostgreSQL Django. Это отдельная зависимость, которую нельзя удалять на этом этапе. MAX-авторизация не затронута.
+Для тестирования публичного API используйте существующий JWT через Angular/Network:
+`GET /api/v1/users/?role=mechanic&search=Серёга125`, должен вернуть массив
+с данными из 1С.
+
+После этих изменений оба флага переключения источника следует удалить
+из `docker-compose.yml`. `ONEC_ALLOW_UNAUTHENTICATED_INTERNAL` оставить
+до настройки технической HTTP-аутентификации между Django и 1С.
+
+MAX и логика регистрации не менялись.
