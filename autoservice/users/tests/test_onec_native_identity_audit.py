@@ -1,7 +1,7 @@
 """Mapping audit is read-only and refuses incomplete identity correspondence."""
 
 from io import StringIO
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 from uuid import UUID
 
 from django.core.management import call_command
