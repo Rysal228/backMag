@@ -1,7 +1,10 @@
+from django.conf import settings
 from django.db.models import Q
 from rest_framework import viewsets, permissions, status
 from rest_framework.exceptions import ValidationError
 from .models import UserRole
+from integrations.services.onec_users import OneCUsersClient
+from .onec_profile_views import OneCProfileView
 from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -21,6 +24,22 @@ class CustomUserViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.all()
     serializer_class = CustomUserSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def list(self, request, *args, **kwargs):
+        # Preserve Angular's bare-array API while replacing the mechanics
+        # source with 1C. Other list variants still use Django temporarily.
+        if (settings.ONEC_MECHANICS_GATEWAY_ENABLED
+                and request.query_params.get('role') == UserRole.MECHANIC):
+            client = OneCUsersClient()
+            current = client.get_user(request.user.phone)
+            OneCProfileView._check_identity(request, current)
+            search = request.query_params.get('search', '').strip()
+            ids = [value.strip() for value in
+                   request.query_params.get('ids', '').split(',')
+                   if value.strip()]
+            return Response(client.list_mechanics(search=search, ids=ids))
+
+        return super().list(request, *args, **kwargs)
 
     def get_queryset(self):
         queryset = super().get_queryset()
