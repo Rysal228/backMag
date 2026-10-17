@@ -18,6 +18,7 @@ class OneCUserServiceError(APIException):
 
     def __init__(self, code, message, *, status_code=502):
         self.status_code = status_code
+        self.default_code = code
         super().__init__(detail=message, code=code)
 
 
