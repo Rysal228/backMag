@@ -1,11 +1,11 @@
-"""1C roster gateway: mechanics always come from 1C when enabled."""
+"""Mechanic roster always comes from 1C; no Django ORM fallback."""
 
 import os
 import uuid
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from integrations.services.onec_users import OneCUserServiceError, OneCUsersClient
@@ -40,7 +40,6 @@ class OneCMechanicsViewTests(SimpleTestCase):
         )
         self.factory = APIRequestFactory()
 
-    @override_settings(ONEC_MECHANICS_GATEWAY_ENABLED=True)
     @patch("users.views.OneCUsersClient")
     def test_reads_mechanics_from_onec_not_django(self, client_type):
         client_type.return_value.get_user.return_value = onec_profile()
@@ -60,7 +59,6 @@ class OneCMechanicsViewTests(SimpleTestCase):
             search="Имя", ids=[mechanic()["id"]]
         )
 
-    @override_settings(ONEC_MECHANICS_GATEWAY_ENABLED=True)
     @patch("users.views.OneCUsersClient")
     def test_missing_auth_role_fails_closed(self, client_type):
         client_type.return_value.get_user.return_value = {
@@ -71,6 +69,19 @@ class OneCMechanicsViewTests(SimpleTestCase):
         request.active_role = "user"
         response = CustomUserViewSet.as_view({"get": "list"})(request)
         self.assertIn(response.status_code, (401, 403))
+        client_type.return_value.list_mechanics.assert_not_called()
+
+
+    @patch("users.views.OneCUsersClient")
+    def test_1c_unavailable_never_falls_back_to_local_users(self, client_type):
+        client_type.return_value.get_user.side_effect = OneCUserServiceError(
+            "onec_unavailable", "Нет соединения с 1С."
+        )
+        request = self.factory.get("/api/v1/users/", {"role": "mechanic", "search": "Сер"})
+        force_authenticate(request, user=self.user, token={"active_role": "user"})
+        request.active_role = "user"
+        response = CustomUserViewSet.as_view({"get": "list"})(request)
+        self.assertEqual(response.status_code, 502)
         client_type.return_value.list_mechanics.assert_not_called()
 
 
