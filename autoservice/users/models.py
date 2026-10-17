@@ -19,6 +19,15 @@ class CustomUser(AbstractUser):
         editable=False,
     )
 
+    # Temporary native 1C identity bridge, not a copy of business profile.
+    # Retained only until all Django ForeignKey/JWT dependencies are removed.
+    onec_id = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        editable=False,
+    )
+
     username = models.CharField(
         max_length=150,
         unique=True,
