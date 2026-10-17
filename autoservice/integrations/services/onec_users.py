@@ -128,3 +128,59 @@ class OneCUsersClient:
 
     def patch_user(self, phone, data):
         return self._request("PATCH", phone, payload=data)
+
+
+    def list_mechanics(self, *, search="", ids=()):
+        """Read only the mechanics roster; 1C performs role/search/ID selection."""
+        url = f"{self.base_url}/{self.path.rsplit('/', 1)[0]}/users/mechanics"
+        auth = (self.api_user, self.api_password) if self.api_user else None
+        params = {"search": search, "ids": ",".join(ids)}
+        try:
+            response = requests.request(
+                "GET", url, params=params, auth=auth,
+                headers={"Accept": "application/json"},
+                timeout=self.timeout, allow_redirects=False,
+            )
+        except requests.Timeout as exc:
+            raise OneCUserServiceError(
+                "onec_timeout", "1С не ответила вовремя.", status_code=504
+            ) from exc
+        except requests.RequestException as exc:
+            raise OneCUserServiceError(
+                "onec_unavailable", "Нет соединения с 1С."
+            ) from exc
+
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise OneCUserServiceError(
+                "onec_invalid_response", "1С вернула некорректный список специалистов."
+            ) from exc
+
+        if not response.ok:
+            if (response.status_code == 400 and isinstance(body, dict)
+                    and isinstance(body.get("code"), str)
+                    and isinstance(body.get("message"), str)):
+                raise OneCUserServiceError(
+                    body["code"], body["message"], status_code=400
+                )
+            raise OneCUserServiceError(
+                "onec_list_failed", "Ошибка получения списка специалистов из 1С."
+            )
+
+        if not isinstance(body, list) or len(body) > 20:
+            raise OneCUserServiceError(
+                "onec_invalid_response", "1С вернула некорректный список специалистов."
+            )
+        for user in body:
+            if (not isinstance(user, dict)
+                    or any(not isinstance(user.get(field), str)
+                           for field in ("id", "phone", "firstName",
+                                         "lastName", "patronymic"))
+                    or user.get("birthday") is not None
+                    and not isinstance(user.get("birthday"), str)):
+                raise OneCUserServiceError(
+                    "onec_invalid_response",
+                    "1С вернула некорректную запись специалиста."
+                )
+        return body
