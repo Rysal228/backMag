@@ -165,11 +165,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'users.CustomUser'
 
-# Switch the existing profile route to 1C only after gateway connectivity is verified.
-ONEC_PROFILE_GATEWAY_ENABLED = os.environ.get("ONEC_PROFILE_GATEWAY_ENABLED") == "1"
-# Move the list of mechanics off Django after the 1C list handler is installed.
-ONEC_MECHANICS_GATEWAY_ENABLED = os.environ.get("ONEC_MECHANICS_GATEWAY_ENABLED") == "1"
-
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'users.authentication.RoleJWTAuthentication',
