@@ -7,6 +7,7 @@ import uuid
 
 import requests
 from django.test import SimpleTestCase
+from django.urls import resolve
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from integrations.services.onec_users import OneCUserServiceError, OneCUsersClient
@@ -33,6 +34,12 @@ def remote_profile(**changes):
 
 
 class OneCProfileGatewayTests(SimpleTestCase):
+    def test_live_profile_url_always_routes_to_onec(self):
+        self.assertIs(
+            resolve("/api/v1/users/profile/").func.cls,
+            OneCProfileView,
+        )
+
     def setUp(self):
         self.factory = APIRequestFactory()
         # No database user object and no local profile cache are needed.
