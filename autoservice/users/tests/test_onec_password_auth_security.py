@@ -32,13 +32,12 @@ class OneCPasswordAuthSecurityTests(SimpleTestCase):
         post.assert_not_called()
 
     @patch.dict(os.environ, {
-        "ONEC_AUTH_VERIFY_URL": "http://host.docker.internal:8081/ServiceCar/hs/api/password/verify",
-        "ONEC_AUTH_ALLOW_INSECURE_INTERNAL_HTTP": "1",
+        "ONEC_AUTH_VERIFY_URL": "",
         "ONEC_AUTH_API_USER": "",
         "ONEC_AUTH_API_PASSWORD": "",
     })
     @patch("integrations.services.onec_password_auth.requests.post")
-    def test_explicit_internal_http_can_call_existing_1c_endpoint(self, post):
+    def test_default_internal_http_calls_existing_1c_endpoint(self, post):
         post.return_value = Mock(
             status_code=200, json=lambda: {
                 "authenticated": True, "onecId": NATIVE, "phone": PHONE,
@@ -58,7 +57,6 @@ class OneCPasswordAuthSecurityTests(SimpleTestCase):
 
     @patch.dict(os.environ, {
         "ONEC_AUTH_VERIFY_URL": "http://host.docker.internal:8081/ServiceCar/hs/api/password/verify",
-        "ONEC_AUTH_ALLOW_INSECURE_INTERNAL_HTTP": "1",
         "ONEC_AUTH_API_USER": "service",
         "ONEC_AUTH_API_PASSWORD": "secret",
     })
@@ -71,12 +69,11 @@ class OneCPasswordAuthSecurityTests(SimpleTestCase):
 
     @patch.dict(os.environ, {
         "ONEC_AUTH_VERIFY_URL": "http://public.example.test/ServiceCar/hs/api/password/verify",
-        "ONEC_AUTH_ALLOW_INSECURE_INTERNAL_HTTP": "1",
         "ONEC_AUTH_API_USER": "",
         "ONEC_AUTH_API_PASSWORD": "",
     })
     @patch("integrations.services.onec_password_auth.requests.post")
-    def test_http_optin_does_not_allow_arbitrary_destinations(self, post):
+    def test_http_does_not_allow_arbitrary_destinations(self, post):
         with self.assertRaises(OneCUserServiceError) as caught:
             OneCPasswordAuthClient()
         self.assertEqual(caught.exception.status_code, 503)
