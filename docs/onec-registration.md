@@ -6,12 +6,16 @@
 2. Django создаёт `CustomUser` с **непригодным для входа** паролем
    (аргумент `password=None`), сохраняет временную роль `user`.
    Эта запись необходима текущим JWT, заказам, автомобилям, чатам.
-3. Django делает POST в существующий `/ServiceCar/hs/api/user`:
+3. Django сначала проверяет готовность 1С по существующему GET
+   /ServiceCar/hs/api/user/profile и требует
+   `passwordRegistration: true`. Если обновление 1С ещё не
+   применено, новая регистрация не создаст пользователя без пароля.
+4. Django делает POST в существующий `/ServiceCar/hs/api/user`:
    `phone`, `externalId` = UUID `CustomUser.id`, ФИО,
    `birthday`, `roles:["user"]`, `password`.
-4. 1С сохраняет элемент справочника, роль и солёный хеш пароля
+5. 1С сохраняет элемент справочника, роль и солёный хеш пароля
    в одной транзакции, возвращает `user.onecId`.
-5. Django сверяет UUID, телефон, externalId, активность и роль,
+6. Django сверяет UUID, телефон, externalId, активность и роль,
    записывает `CustomUser.onec_id` и выдаёт прежний JWT.
 
 Пользовательские пароли **не сохраняются как Django-хеши**;
@@ -25,8 +29,9 @@ GET /api/v1/users/auth/password/ теперь читает `hasPassword` у 1С,
 **Сначала 1С:** обновить в Конфигураторе модуль ServiceCarAPI
 из ветки `Rysal228/1c:feat/onec-password-registration`,
 проверить синтаксис и обновить конфигурацию БД 1С.
-Никаких новых URL-шаблонов не требуется. Статус `hasPassword`
-должен появиться в ответе существующего GET пользователя.
+Никаких новых URL-шаблонов не требуется. Признак
+`passwordRegistration:true` должен появиться в GET /user/profile,
+а статус `hasPassword` — в ответе существующего GET пользователя.
 
 **Затем Django:** после объединения PR, на сервере
 `git pull` и `docker compose up -d --build backend`.
