@@ -1,7 +1,7 @@
-from django.contrib.auth import authenticate, get_user_model
-from django.contrib.auth.hashers import check_password
-from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth import get_user_model
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
+
+from integrations.services.onec_password_auth import OneCPasswordAuthClient
 
 from .role_selection import RoleSelectionService
 from .tokens import create_auth_tokens, create_max_auth_tokens
@@ -15,23 +15,33 @@ class AuthService:
     def login(*, phone: str, password: str, role: str | None = None) -> dict[str, str]:
         phone = PhoneNormalizer.normalize(phone)
 
-        user = authenticate(
-            username=phone,
-            password=password,
+        # 1C is authoritative for password verification; no Django fallback.
+        identity = OneCPasswordAuthClient().verify_password(
+            phone=phone, password=password,
         )
-
-        if user is None:
+        if identity is None:
             raise AuthenticationFailed(
                 'Неверный номер телефона или пароль.'
             )
 
-        if not user.is_active:
+        # Django still owns JWT/FK identity during the migration.
+        user = User.objects.filter(phone=phone).first()
+        if (
+            user is None
+            or not user.is_active
+            or not user.onec_id
+            or str(user.onec_id) != identity['onecId']
+        ):
             raise AuthenticationFailed(
-                'Пользователь деактивирован.'
+                'Неверный номер телефона или пароль.'
+            )
+
+        if set(get_user_roles(user)) != set(identity['roles']):
+            raise AuthenticationFailed(
+                'Роли пользователя требуют синхронизации с 1С.'
             )
 
         roles = get_user_roles(user)
-
         if role is not None:
             return create_auth_tokens(user, active_role=role)
 
@@ -96,19 +106,10 @@ class AuthService:
         current_password: str | None,
         new_password: str,
     ) -> None:
-        if user.has_usable_password():
-            if not current_password or not check_password(
-                current_password,
-                user.password,
-            ):
-                raise ValidationError({
-                    'currentPassword': 'Неверный текущий пароль.'
-                })
-
-        validate_password(new_password, user)
-
-        user.set_password(new_password)
-        user.save(update_fields=['password'])
+        # Never change only Django's obsolete hash: 1C is the password store.
+        raise ValidationError({
+            'newPassword': 'Изменение пароля через сайт пока недоступно. Пароль хранится в 1С.'
+        })
 
 
 class PhoneNormalizer:
