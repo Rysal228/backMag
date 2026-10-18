@@ -131,7 +131,7 @@ class OneCUsersClient:
 
     def create_user_with_password(
         self, *, phone, external_id, password, first_name, last_name,
-        patronymic="", birthday=None,
+        patronymic="", birthday=None, messenger_user_id="",
     ):
         """Create the 1C catalog element, roles and password in one 1C transaction.
 
@@ -159,6 +159,8 @@ class OneCUsersClient:
             "isActive": True,
             "roles": ["user"],
         }
+        if messenger_user_id:
+            payload["messengerUserId"] = str(messenger_user_id)
         # The real POST response must confirm the persisted password. An old
         # 1C module without password support does not return hasPassword.
         url = f"{self.base_url}/{self.path}"
@@ -175,6 +177,8 @@ class OneCUsersClient:
             or profile.get("isActive") is not True
             or profile.get("roles") != ["user"]
             or profile.get("hasPassword") is not True
+            or (messenger_user_id and
+                profile.get("messengerUserId") != str(messenger_user_id))
         ):
             raise OneCUserServiceError(
                 "onec_identity_mismatch", "1С вернула несовпадающую учётную запись."
