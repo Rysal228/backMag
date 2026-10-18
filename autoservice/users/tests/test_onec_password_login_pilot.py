@@ -233,6 +233,7 @@ class OneCPasswordLoginTests(SimpleTestCase):
             phone=PHONE, external_id=local_id, password='new-synthetic-password',
             first_name='Иван', last_name='Иванов', patronymic='',
             birthday=None, messenger_user_id='max-user-123',
+            roles=['user'],
         )
         self.assertEqual(user.onec_id, NATIVE)
         user.save.assert_called_once_with(update_fields=['onec_id'])
