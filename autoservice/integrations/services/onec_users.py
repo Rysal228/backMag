@@ -24,16 +24,17 @@ class OneCUserServiceError(APIException):
 
 
 class OneCUsersClient:
-    """Server-to-server API. Only a trusted, explicit internal opt-in permits no auth."""
+    """Server-to-server API, using the existing known internal ServiceCarAPI."""
 
     def __init__(self):
         self.base_url = os.environ.get("ONEC_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
         self.path = os.environ.get("ONEC_USERS_PATH", DEFAULT_USERS_PATH).strip("/")
         self.api_user = os.environ.get("ONEC_API_USER")
         self.api_password = os.environ.get("ONEC_API_PASSWORD")
-        self.allow_internal = (
-            os.environ.get("ONEC_ALLOW_UNAUTHENTICATED_INTERNAL") == "1"
-        )
+        # The already-published internal ServiceCarAPI needs no new
+        # Django deployment flag. Custom/noninternal endpoints still require
+        # configured service credentials.
+        self.allow_internal = self.base_url == DEFAULT_BASE_URL
         self.timeout = 10
 
         if bool(self.api_user) != bool(self.api_password):
@@ -43,7 +44,7 @@ class OneCUsersClient:
                 status_code=503,
             )
         if not self.api_user and not (
-            self.allow_internal and self.base_url == DEFAULT_BASE_URL
+            self.allow_internal
         ):
             raise OneCUserServiceError(
                 "onec_credentials_missing",
@@ -127,6 +128,58 @@ class OneCUsersClient:
                 "onec_invalid_response", "1С не вернула идентификатор пользователя."
             )
         return user
+
+    def create_user_with_password(
+        self, *, phone, external_id, password, first_name, last_name,
+        patronymic="", birthday=None,
+    ):
+        """Create the 1C catalog element, roles and password in one 1C transaction.
+
+        Existing import POST /user without a password stays compatible.
+        No password hash is stored in Django or returned by 1C.
+        """
+        normalized = str(phone).strip().removeprefix("+")
+        if not (
+            len(normalized) == 11 and normalized.startswith("7")
+            and normalized.isascii() and normalized.isdigit()
+        ):
+            raise OneCUserServiceError(
+                "onec_invalid_identity", "Некорректный телефон регистрации.",
+                status_code=400,
+            )
+        native_django_id = str(UUID(str(external_id)))
+        payload = {
+            "phone": normalized,
+            "externalId": native_django_id,
+            "password": password,
+            "firstName": first_name,
+            "lastName": last_name,
+            "patronymic": patronymic,
+            "birthday": birthday.isoformat() if birthday else None,
+            "isActive": True,
+            "roles": ["user"],
+        }
+        # The real POST response must confirm the persisted password. An old
+        # 1C module without password support does not return hasPassword.
+        url = f"{self.base_url}/{self.path}"
+        profile = self._request_user_url("POST", url, payload=payload)
+        try:
+            onec_id = str(UUID(str(profile["onecId"])))
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            raise OneCUserServiceError(
+                "onec_invalid_response", "1С не вернула собственный ID пользователя."
+            ) from exc
+        if (
+            profile.get("phone") != normalized
+            or profile.get("externalId") != native_django_id
+            or profile.get("isActive") is not True
+            or profile.get("roles") != ["user"]
+            or profile.get("hasPassword") is not True
+        ):
+            raise OneCUserServiceError(
+                "onec_identity_mismatch", "1С вернула несовпадающую учётную запись."
+            )
+        return onec_id
 
     def get_user(self, phone):
         return self._request("GET", phone)

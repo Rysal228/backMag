@@ -45,6 +45,7 @@ class RegisterSerializer(serializers.Serializer):
     password = serializers.CharField(
         write_only=True,
         min_length=8,
+        max_length=128,
     )
 
     firstName = serializers.CharField(
