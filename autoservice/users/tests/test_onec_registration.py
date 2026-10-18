@@ -171,3 +171,62 @@ class OneCRegistrationClientTests(SimpleTestCase):
                 first_name="Иван", last_name="Иванов",
             )
         self.assertEqual(caught.exception.status_code, 409)
+
+
+class OneCPasswordStatusTests(SimpleTestCase):
+    @patch("users.auth.views.OneCUsersClient")
+    def test_status_reads_onec_register_not_django_hash(self, client_type):
+        from rest_framework.test import APIRequestFactory, force_authenticate
+        from users.auth.views import PasswordView
+        user = SimpleNamespace(
+            pk=UUID(LEGACY_ID),
+            onec_id=UUID(NATIVE_ID),
+            phone=PHONE,
+            is_authenticated=True,
+        )
+        client_type.return_value.get_user.return_value = dict(
+            remote_user(), hasPassword=True
+        )
+        request = APIRequestFactory().get("/api/v1/users/auth/password/")
+        force_authenticate(request, user=user)
+        response = PasswordView.as_view()(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {"hasPassword": True})
+        client_type.return_value.get_user.assert_called_once_with(PHONE)
+
+    @patch("users.auth.views.OneCUsersClient")
+    def test_status_fails_on_remote_user_mismatch(self, client_type):
+        from rest_framework.test import APIRequestFactory, force_authenticate
+        from users.auth.views import PasswordView
+        user = SimpleNamespace(
+            pk=UUID(LEGACY_ID),
+            onec_id=UUID(NATIVE_ID),
+            phone=PHONE,
+            is_authenticated=True,
+        )
+        client_type.return_value.get_user.return_value = dict(
+            remote_user(),
+            externalId="aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa",
+            hasPassword=True,
+        )
+        request = APIRequestFactory().get("/api/v1/users/auth/password/")
+        force_authenticate(request, user=user)
+        response = PasswordView.as_view()(request)
+        self.assertEqual(response.status_code, 502)
+
+    @patch("users.auth.views.OneCUsersClient")
+    def test_unlinked_max_only_user_has_no_onec_password(self, client_type):
+        from rest_framework.test import APIRequestFactory, force_authenticate
+        from users.auth.views import PasswordView
+        user = SimpleNamespace(
+            pk=UUID(LEGACY_ID),
+            onec_id=None,
+            phone=PHONE,
+            is_authenticated=True,
+        )
+        request = APIRequestFactory().get("/api/v1/users/auth/password/")
+        force_authenticate(request, user=user)
+        response = PasswordView.as_view()(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {"hasPassword": False})
+        client_type.assert_not_called()
