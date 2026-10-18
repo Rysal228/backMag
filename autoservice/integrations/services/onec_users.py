@@ -128,6 +128,55 @@ class OneCUsersClient:
             )
         return user
 
+    def create_user_with_password(
+        self, *, phone, external_id, password, first_name, last_name,
+        patronymic="", birthday=None,
+    ):
+        """Create the 1C catalog element, roles and password in one 1C transaction.
+
+        Existing import POST /user without a password stays compatible.
+        No password hash is stored in Django or returned by 1C.
+        """
+        normalized = str(phone).strip().removeprefix("+")
+        if not (
+            len(normalized) == 11 and normalized.startswith("7")
+            and normalized.isascii() and normalized.isdigit()
+        ):
+            raise OneCUserServiceError(
+                "onec_invalid_identity", "Некорректный телефон регистрации.",
+                status_code=400,
+            )
+        native_django_id = str(UUID(str(external_id)))
+        payload = {
+            "phone": normalized,
+            "externalId": native_django_id,
+            "password": password,
+            "firstName": first_name,
+            "lastName": last_name,
+            "patronymic": patronymic,
+            "birthday": birthday.isoformat() if birthday else None,
+            "isActive": True,
+            "roles": ["user"],
+        }
+        url = f"{self.base_url}/{self.path}"
+        profile = self._request_user_url("POST", url, payload=payload)
+        try:
+            onec_id = str(UUID(str(profile["onecId"])))
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            raise OneCUserServiceError(
+                "onec_invalid_response", "1С не вернула собственный ID пользователя."
+            ) from exc
+        if (
+            profile.get("phone") != normalized
+            or profile.get("externalId") != native_django_id
+            or profile.get("isActive") is not True
+            or profile.get("roles") != ["user"]
+        ):
+            raise OneCUserServiceError(
+                "onec_identity_mismatch", "1С вернула несовпадающую учётную запись."
+            )
+        return onec_id
+
     def get_user(self, phone):
         return self._request("GET", phone)
 
