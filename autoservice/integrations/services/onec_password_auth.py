@@ -29,10 +29,7 @@ class OneCPasswordAuthClient:
         self.password = os.environ.get("ONEC_AUTH_API_PASSWORD", "")
         parts = urlsplit(self.url)
 
-        self.internal_http = (
-            os.environ.get("ONEC_AUTH_ALLOW_INSECURE_INTERNAL_HTTP") == "1"
-            and self.url == INTERNAL_PLAINTEXT_VERIFY_URL
-        )
+        self.internal_http = self.url == INTERNAL_PLAINTEXT_VERIFY_URL
         valid_url = (
             bool(parts.hostname)
             and parts.username is None and parts.password is None
