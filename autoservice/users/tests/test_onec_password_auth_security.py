@@ -222,10 +222,10 @@ class OneCPasswordAuthSecurityTests(SimpleTestCase):
                 phone=PHONE, onec_id=NATIVE,
                 current_password="original-123", new_password="replacement-123",
             )
-    def test_password_change_form_requires_current_password(self):
+    def test_initial_password_form_does_not_require_current_password(self):
         serializer = PasswordSerializer(data={"newPassword": "new-synthetic-123"})
-        self.assertFalse(serializer.is_valid())
-        self.assertIn("currentPassword", serializer.errors)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertNotIn("currentPassword", serializer.validated_data)
 
     def test_password_change_form_rejects_oversize_password(self):
         serializer = PasswordSerializer(data={
@@ -233,3 +233,37 @@ class OneCPasswordAuthSecurityTests(SimpleTestCase):
         })
         self.assertFalse(serializer.is_valid())
         self.assertIn("newPassword", serializer.errors)
+
+    @patch.dict(os.environ, {
+        "ONEC_AUTH_VERIFY_URL": "",
+        "ONEC_AUTH_API_USER": "",
+        "ONEC_AUTH_API_PASSWORD": "",
+    })
+    @patch("integrations.services.onec_password_auth.requests.post")
+    def test_first_password_setup_requires_matching_native_identity(self, post):
+        post.return_value = Mock(status_code=200, json=lambda: {
+            "created": True, "onecId": NATIVE, "phone": PHONE,
+        })
+        self.assertTrue(OneCPasswordAuthClient().setup_initial_password(
+            phone=PHONE, onec_id=NATIVE,
+            external_id="44d93602-a058-4896-9f68-181bb34b4af3",
+            new_password="new-synthetic-123",
+        ))
+        self.assertTrue(post.call_args.args[0].endswith("/password/setup"))
+        self.assertFalse(post.call_args.kwargs["allow_redirects"])
+
+    @patch.dict(os.environ, {
+        "ONEC_AUTH_VERIFY_URL": "",
+        "ONEC_AUTH_API_USER": "",
+        "ONEC_AUTH_API_PASSWORD": "",
+    })
+    @patch("integrations.services.onec_password_auth.requests.post")
+    def test_first_password_setup_refuses_overwrite_or_identity_conflict(self, post):
+        post.return_value = Mock(status_code=409)
+        with self.assertRaises(OneCUserServiceError) as caught:
+            OneCPasswordAuthClient().setup_initial_password(
+                phone=PHONE, onec_id=NATIVE,
+                external_id="44d93602-a058-4896-9f68-181bb34b4af3",
+                new_password="new-synthetic-123",
+            )
+        self.assertEqual(caught.exception.status_code, 409)
