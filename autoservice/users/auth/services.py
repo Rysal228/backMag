@@ -144,6 +144,13 @@ class AuthService:
         current_password: str | None,
         new_password: str,
     ) -> None:
+        # Do not check an obsolete Django hash or write a new Django hash
+        # after this account has switched to 1C password verification.
+        if AuthService._uses_onec_password_login(user.phone):
+            raise ValidationError({
+                'newPassword': 'Смена пароля этого аккаунта будет доступна после переноса в 1С.'
+            })
+
         if user.has_usable_password():
             if not current_password or not check_password(
                 current_password,
@@ -152,13 +159,6 @@ class AuthService:
                 raise ValidationError({
                     'currentPassword': 'Неверный текущий пароль.'
                 })
-
-        # Do not silently update only the obsolete Django password when
-        # the selected account is already verified by the 1C credential store.
-        if AuthService._uses_onec_password_login(user.phone):
-            raise ValidationError({
-                'newPassword': 'Смена пароля этого аккаунта будет доступна после переноса в 1С.'
-            })
 
         validate_password(new_password, user)
 
