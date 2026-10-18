@@ -28,6 +28,7 @@ def remote_user():
         "birthday": None,
         "roles": ["user"],
         "isActive": True,
+        "hasPassword": True,
     }
 
 
@@ -105,14 +106,14 @@ class OneCRegistrationClientTests(SimpleTestCase):
     @patch.dict("os.environ", {
         "ONEC_BASE_URL": "http://host.docker.internal:8081",
         "ONEC_USERS_PATH": "/ServiceCar/hs/api/user",
-        "ONEC_ALLOW_UNAUTHENTICATED_INTERNAL": "1",
         "ONEC_API_USER": "",
         "ONEC_API_PASSWORD": "",
     })
     def test_posts_new_user_to_1c_with_password(self, request):
-        request.return_value = Mock(
-            ok=True, status_code=201, json=lambda: {"user": remote_user()}
-        )
+        request.side_effect = [
+            Mock(status_code=200, json=lambda: {"passwordRegistration": True}),
+            Mock(ok=True, status_code=201, json=lambda: {"user": remote_user()}),
+        ]
         native_id = OneCUsersClient().create_user_with_password(
             phone="+" + PHONE,
             external_id=UUID(LEGACY_ID),
@@ -122,6 +123,9 @@ class OneCRegistrationClientTests(SimpleTestCase):
         )
         self.assertEqual(native_id, NATIVE_ID)
         kwargs = request.call_args.kwargs
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual(request.call_args_list[0].args[0], "GET")
+        self.assertTrue(request.call_args_list[0].args[1].endswith("/user/profile"))
         self.assertEqual(request.call_args.args[0], "POST")
         self.assertTrue(request.call_args.args[1].endswith("/ServiceCar/hs/api/user"))
         self.assertEqual(kwargs["json"]["externalId"], LEGACY_ID)
@@ -133,15 +137,15 @@ class OneCRegistrationClientTests(SimpleTestCase):
     @patch.dict("os.environ", {
         "ONEC_BASE_URL": "http://host.docker.internal:8081",
         "ONEC_USERS_PATH": "/ServiceCar/hs/api/user",
-        "ONEC_ALLOW_UNAUTHENTICATED_INTERNAL": "1",
         "ONEC_API_USER": "",
         "ONEC_API_PASSWORD": "",
     })
     def test_mismatched_native_identity_is_rejected(self, request):
         bad = dict(remote_user(), externalId="aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa")
-        request.return_value = Mock(
-            ok=True, status_code=201, json=lambda: {"user": bad}
-        )
+        request.side_effect = [
+            Mock(status_code=200, json=lambda: {"passwordRegistration": True}),
+            Mock(ok=True, status_code=201, json=lambda: {"user": bad}),
+        ]
         with self.assertRaises(OneCUserServiceError):
             OneCUsersClient().create_user_with_password(
                 phone=PHONE,
@@ -154,15 +158,17 @@ class OneCRegistrationClientTests(SimpleTestCase):
     @patch.dict("os.environ", {
         "ONEC_BASE_URL": "http://host.docker.internal:8081",
         "ONEC_USERS_PATH": "/ServiceCar/hs/api/user",
-        "ONEC_ALLOW_UNAUTHENTICATED_INTERNAL": "1",
         "ONEC_API_USER": "",
         "ONEC_API_PASSWORD": "",
     })
     def test_1c_duplicate_phone_surfaces_conflict(self, request):
-        request.return_value = Mock(
-            ok=False, status_code=409,
-            json=lambda: {"code": "user_exists", "message": "Уже существует."},
-        )
+        request.side_effect = [
+            Mock(status_code=200, json=lambda: {"passwordRegistration": True}),
+            Mock(
+                ok=False, status_code=409,
+                json=lambda: {"code": "user_exists", "message": "Уже существует."},
+            ),
+        ]
         with self.assertRaises(OneCUserServiceError) as caught:
             OneCUsersClient().create_user_with_password(
                 phone=PHONE,
@@ -171,6 +177,29 @@ class OneCRegistrationClientTests(SimpleTestCase):
                 first_name="Иван", last_name="Иванов",
             )
         self.assertEqual(caught.exception.status_code, 409)
+
+    @patch("integrations.services.onec_users.requests.request")
+    @patch.dict("os.environ", {
+        "ONEC_BASE_URL": "http://host.docker.internal:8081",
+        "ONEC_USERS_PATH": "/ServiceCar/hs/api/user",
+        "ONEC_API_USER": "",
+        "ONEC_API_PASSWORD": "",
+    })
+    def test_old_1c_does_not_create_passwordless_account(self, request):
+        request.return_value = Mock(
+            status_code=200, json=lambda: {"result": "ok"}
+        )
+        with self.assertRaises(OneCUserServiceError) as caught:
+            OneCUsersClient().create_user_with_password(
+                phone=PHONE,
+                external_id=LEGACY_ID,
+                password="test-registration-password",
+                first_name="Иван", last_name="Иванов",
+            )
+        self.assertEqual(caught.exception.status_code, 503)
+        request.assert_called_once()
+        self.assertEqual(request.call_args.args[0], "GET")
+
 
 
 class OneCPasswordStatusTests(SimpleTestCase):
