@@ -120,12 +120,36 @@ class OneCPasswordLoginTests(SimpleTestCase):
             AuthService.login(phone=PHONE, password='old-django')
         self.assertEqual(caught.exception.status_code, 503)
 
-    def test_password_change_cannot_write_only_django(self):
-        user = Mock(phone=PHONE)
-        with self.assertRaises(ValidationError):
-            AuthService.set_password(
-                user=user, current_password='old', new_password='new'
-            )
-        user.has_usable_password.assert_not_called()
+    @patch('users.auth.services.OneCPasswordAuthClient')
+    def test_password_change_uses_only_onec(self, client_type):
+        user = Mock(phone=PHONE, onec_id=UUID(NATIVE), is_active=True)
+        client_type.return_value.change_password.return_value = True
+        AuthService.set_password(
+            user=user, current_password='original-pass', new_password='new-pass',
+        )
+        client_type.return_value.change_password.assert_called_once_with(
+            phone=PHONE, onec_id=UUID(NATIVE),
+            current_password='original-pass', new_password='new-pass',
+        )
         user.set_password.assert_not_called()
         user.save.assert_not_called()
+
+    @patch('users.auth.services.OneCPasswordAuthClient')
+    def test_password_change_wrong_current_password(self, client_type):
+        user = Mock(phone=PHONE, onec_id=UUID(NATIVE), is_active=True)
+        client_type.return_value.change_password.return_value = False
+        with self.assertRaises(ValidationError):
+            AuthService.set_password(
+                user=user, current_password='wrong', new_password='new-pass'
+            )
+        user.set_password.assert_not_called()
+        user.save.assert_not_called()
+
+    @patch('users.auth.services.OneCPasswordAuthClient')
+    def test_max_only_without_onec_id_cannot_change_password(self, client_type):
+        user = Mock(phone=PHONE, onec_id=None, is_active=True)
+        with self.assertRaises(ValidationError):
+            AuthService.set_password(
+                user=user, current_password='original', new_password='new-pass'
+            )
+        client_type.assert_not_called()
