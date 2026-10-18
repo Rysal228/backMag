@@ -1,8 +1,4 @@
-import os
-
-from django.contrib.auth import authenticate, get_user_model
-from django.contrib.auth.hashers import check_password
-from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth import get_user_model
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 
 from integrations.services.onec_password_auth import OneCPasswordAuthClient
@@ -16,69 +12,36 @@ User = get_user_model()
 
 class AuthService:
     @staticmethod
-    def _uses_onec_password_login(user) -> bool:
-        """Switch linked 1C users together when explicitly enabled.
-
-        Unlinked accounts created by the existing registration flow continue
-        to use Django passwords until registration is migrated to 1C.
-        """
-        return (
-            os.environ.get('ONEC_PASSWORD_LOGIN_ENABLED') == '1'
-            and user is not None
-            and bool(user.onec_id)
-        )
-
-    @staticmethod
     def login(*, phone: str, password: str, role: str | None = None) -> dict[str, str]:
         phone = PhoneNormalizer.normalize(phone)
-        user = User.objects.filter(phone=phone).first()
 
-        if AuthService._uses_onec_password_login(user):
-            # Linked accounts: never fall back to the old Django hash when
-            # 1C rejects a password or its protected service is unavailable.
-            identity = OneCPasswordAuthClient().verify_password(
-                phone=phone, password=password,
-            )
-            if identity is None:
-                raise AuthenticationFailed(
-                    'Неверный номер телефона или пароль.'
-                )
-
-            # Preserve legacy Django user_id and FK relations. Never trust
-            # a phone match alone: 1C's native UUID must be bound locally.
-            if (
-                user is None
-                or not user.is_active
-                or not user.onec_id
-                or str(user.onec_id) != identity['onecId']
-            ):
-                raise AuthenticationFailed(
-                    'Неверный номер телефона или пароль.'
-                )
-
-            # Until roles migrate, refuse inconsistent role assignments
-            # instead of accidentally granting stale or elevated access.
-            if set(get_user_roles(user)) != set(identity['roles']):
-                raise AuthenticationFailed(
-                    'Роли пользователя требуют синхронизации с 1С.'
-                )
-        else:
-            user = authenticate(
-                username=phone,
-                password=password,
-            )
-            if user is None:
-                raise AuthenticationFailed(
-                    'Неверный номер телефона или пароль.'
-                )
-
-        if not user.is_active:
+        # 1C is authoritative for password verification; no Django fallback.
+        identity = OneCPasswordAuthClient().verify_password(
+            phone=phone, password=password,
+        )
+        if identity is None:
             raise AuthenticationFailed(
-                'Пользователь деактивирован.'
+                'Неверный номер телефона или пароль.'
+            )
+
+        # Django still owns JWT/FK identity during the migration.
+        user = User.objects.filter(phone=phone).first()
+        if (
+            user is None
+            or not user.is_active
+            or not user.onec_id
+            or str(user.onec_id) != identity['onecId']
+        ):
+            raise AuthenticationFailed(
+                'Неверный номер телефона или пароль.'
+            )
+
+        if set(get_user_roles(user)) != set(identity['roles']):
+            raise AuthenticationFailed(
+                'Роли пользователя требуют синхронизации с 1С.'
             )
 
         roles = get_user_roles(user)
-
         if role is not None:
             return create_auth_tokens(user, active_role=role)
 
@@ -143,26 +106,10 @@ class AuthService:
         current_password: str | None,
         new_password: str,
     ) -> None:
-        # Do not check an obsolete Django hash or write a new Django hash
-        # after this account has switched to 1C password verification.
-        if AuthService._uses_onec_password_login(user):
-            raise ValidationError({
-                'newPassword': 'Смена пароля этого аккаунта будет доступна после переноса в 1С.'
-            })
-
-        if user.has_usable_password():
-            if not current_password or not check_password(
-                current_password,
-                user.password,
-            ):
-                raise ValidationError({
-                    'currentPassword': 'Неверный текущий пароль.'
-                })
-
-        validate_password(new_password, user)
-
-        user.set_password(new_password)
-        user.save(update_fields=['password'])
+        # Never change only Django's obsolete hash: 1C is the password store.
+        raise ValidationError({
+            'newPassword': 'Изменение пароля через сайт пока недоступно. Пароль хранится в 1С.'
+        })
 
 
 class PhoneNormalizer:
