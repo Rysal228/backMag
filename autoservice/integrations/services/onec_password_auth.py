@@ -1,9 +1,8 @@
-"""1C password-verification client.
+"""Password verification through existing 1C ServiceCarAPI.
 
-HTTPS with technical credentials is preferred. A narrowly scoped, explicit
-opt-in exists for the currently deployed internal HTTP service; it carries
-plaintext user passwords over that link and must not be enabled accidentally.
-No local password hashes.
+By default calls the exact internal 1C URL already deployed.
+The HTTP hop transmits user passwords without encryption. HTTPS may be
+configured separately. No password hashes are stored by this client.
 """
 
 import os
@@ -24,7 +23,10 @@ INTERNAL_PLAINTEXT_VERIFY_URL = (
 
 class OneCPasswordAuthClient:
     def __init__(self):
-        self.url = os.environ.get("ONEC_AUTH_VERIFY_URL", "").strip()
+        self.url = (
+            os.environ.get("ONEC_AUTH_VERIFY_URL", "").strip()
+            or INTERNAL_PLAINTEXT_VERIFY_URL
+        )
         self.username = os.environ.get("ONEC_AUTH_API_USER", "")
         self.password = os.environ.get("ONEC_AUTH_API_PASSWORD", "")
         parts = urlsplit(self.url)
