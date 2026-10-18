@@ -1,7 +1,9 @@
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 
 from integrations.services.onec_password_auth import OneCPasswordAuthClient
+from integrations.services.onec_users import OneCUsersClient
 
 from .role_selection import RoleSelectionService
 from .tokens import create_auth_tokens, create_max_auth_tokens
@@ -88,14 +90,30 @@ class AuthService:
                 'phone': 'User with this phone already exists.',
             })
 
-        user = User.objects.create_user(
-            phone=phone,
-            password=password,
-            first_name=first_name,
-            last_name=last_name,
-            patronymic=patronymic,
-            birthday=birthday,
-        )
+        # Keep only Django identity and role relations for JWT and existing
+        # cars/orders; 1C owns the credential and its salted stored hash.
+        # No usable Django password is ever written during registration.
+        with transaction.atomic():
+            user = User.objects.create_user(
+                phone=phone,
+                password=None,
+                first_name=first_name,
+                last_name=last_name,
+                patronymic=patronymic,
+                birthday=birthday,
+            )
+
+            native_id = OneCUsersClient().create_user_with_password(
+                phone=phone,
+                external_id=user.pk,
+                password=password,
+                first_name=first_name,
+                last_name=last_name,
+                patronymic=patronymic,
+                birthday=birthday,
+            )
+            user.onec_id = native_id
+            user.save(update_fields=['onec_id'])
 
         return create_auth_tokens(user)
 
