@@ -241,3 +241,88 @@ class OneCPasswordAuthClient:
                 status_code=502,
             )
         return True
+
+    def setup_initial_password(self, *, phone, onec_id, external_id, new_password):
+        """Set a password only on an already-linked, passwordless 1C account.
+
+        Caller must validate the signed MAX identity. The 1C API verifies
+        the native/user bridge again and refuses replacing an existing hash.
+        """
+        phone = str(phone).strip().removeprefix("+")
+        if not (
+            len(phone) == 11 and phone.startswith("7")
+            and phone.isascii() and phone.isdigit()
+        ):
+            raise OneCUserServiceError(
+                "onec_auth_invalid_phone", "Некорректный номер телефона.",
+                status_code=400,
+            )
+        try:
+            native_id = str(UUID(str(onec_id)))
+            local_id = str(UUID(str(external_id)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise OneCUserServiceError(
+                "onec_auth_invalid_identity", "Неверная привязка аккаунта.",
+                status_code=403,
+            ) from exc
+        if not isinstance(new_password, str) or not 8 <= len(new_password) <= 128:
+            raise OneCUserServiceError(
+                "onec_auth_invalid_password", "Некорректная длина пароля.",
+                status_code=400,
+            )
+        if not self.url.endswith("/password/verify"):
+            raise OneCUserServiceError(
+                "onec_auth_invalid_url", "Некорректный адрес сервиса 1С.",
+                status_code=503,
+            )
+        endpoint = self.url[:-len("/password/verify")] + "/password/setup"
+        try:
+            response = requests.post(
+                endpoint,
+                json={
+                    "phone": phone,
+                    "onecId": native_id,
+                    "externalId": local_id,
+                    "newPassword": new_password,
+                },
+                auth=None if self.internal_http else (self.username, self.password),
+                headers={"Accept": "application/json"},
+                timeout=10,
+                allow_redirects=False,
+            )
+        except requests.Timeout as exc:
+            raise OneCUserServiceError(
+                "onec_auth_timeout", "1С не ответила вовремя.", status_code=504,
+            ) from exc
+        except requests.RequestException as exc:
+            raise OneCUserServiceError(
+                "onec_auth_unavailable", "Недоступен сервер паролей 1С.",
+                status_code=503,
+            ) from exc
+
+        if response.status_code == 409:
+            raise OneCUserServiceError(
+                "onec_password_conflict",
+                "Пароль уже существует или сведения аккаунта не совпадают.",
+                status_code=409,
+            )
+        if response.status_code != 200:
+            raise OneCUserServiceError(
+                "onec_auth_upstream_error", "Не удалось установить пароль в 1С.",
+                status_code=502,
+            )
+        try:
+            data = response.json()
+            native_result = str(UUID(str(data["onecId"])))
+            if (
+                data.get("created") is not True
+                or data.get("phone") != phone
+                or native_result != native_id
+            ):
+                raise ValueError("invalid setup response")
+        except (TypeError, ValueError, KeyError, AttributeError) as exc:
+            raise OneCUserServiceError(
+                "onec_auth_invalid_response", "Неожиданный ответ 1С.",
+                status_code=502,
+            ) from exc
+        return True
