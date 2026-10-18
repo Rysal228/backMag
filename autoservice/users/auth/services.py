@@ -244,10 +244,6 @@ class AuthService:
                     new_password=new_password,
                 )
             else:
-                if set(get_user_roles(locked)) != {'user'}:
-                    raise ValidationError({
-                        'newPassword': 'Роли аккаунта требуют синхронизации.'
-                    })
                 native_id = client.create_user_with_password(
                     phone=locked.phone,
                     external_id=locked.pk,
@@ -257,6 +253,7 @@ class AuthService:
                     patronymic=locked.patronymic,
                     birthday=locked.birthday,
                     messenger_user_id=locked.messenger_user_id,
+                    roles=get_user_roles(locked),
                 )
 
             locked.onec_id = native_id
