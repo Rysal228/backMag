@@ -24,16 +24,17 @@ class OneCUserServiceError(APIException):
 
 
 class OneCUsersClient:
-    """Server-to-server API. Only a trusted, explicit internal opt-in permits no auth."""
+    """Server-to-server API, using the existing known internal ServiceCarAPI."""
 
     def __init__(self):
         self.base_url = os.environ.get("ONEC_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
         self.path = os.environ.get("ONEC_USERS_PATH", DEFAULT_USERS_PATH).strip("/")
         self.api_user = os.environ.get("ONEC_API_USER")
         self.api_password = os.environ.get("ONEC_API_PASSWORD")
-        self.allow_internal = (
-            os.environ.get("ONEC_ALLOW_UNAUTHENTICATED_INTERNAL") == "1"
-        )
+        # The already-published internal ServiceCarAPI needs no new
+        # Django deployment flag. Custom/noninternal endpoints still require
+        # configured service credentials.
+        self.allow_internal = self.base_url == DEFAULT_BASE_URL
         self.timeout = 10
 
         if bool(self.api_user) != bool(self.api_password):
@@ -43,7 +44,7 @@ class OneCUsersClient:
                 status_code=503,
             )
         if not self.api_user and not (
-            self.allow_internal and self.base_url == DEFAULT_BASE_URL
+            self.allow_internal
         ):
             raise OneCUserServiceError(
                 "onec_credentials_missing",
