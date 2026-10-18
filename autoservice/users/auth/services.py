@@ -16,25 +16,25 @@ User = get_user_model()
 
 class AuthService:
     @staticmethod
-    def _uses_onec_password_login(phone: str) -> bool:
-        """Explicit phone allowlist; empty/unset means existing Django login.
+    def _uses_onec_password_login(user) -> bool:
+        """Switch linked 1C users together when explicitly enabled.
 
-        This is a controlled migration pilot, not a general production switch.
-        A literal '*' is not a wildcard and cannot enable all accounts.
+        Unlinked accounts created by the existing registration flow continue
+        to use Django passwords until registration is migrated to 1C.
         """
-        allowed = os.environ.get('ONEC_PASSWORD_LOGIN_PILOT_PHONES', '')
-        return phone in {
-            item.strip().removeprefix('+')
-            for item in allowed.split(',')
-            if item.strip()
-        }
+        return (
+            os.environ.get('ONEC_PASSWORD_LOGIN_ENABLED') == '1'
+            and user is not None
+            and bool(user.onec_id)
+        )
 
     @staticmethod
     def login(*, phone: str, password: str, role: str | None = None) -> dict[str, str]:
         phone = PhoneNormalizer.normalize(phone)
+        user = User.objects.filter(phone=phone).first()
 
-        if AuthService._uses_onec_password_login(phone):
-            # Pilot only. Never fall back to the old Django hash when
+        if AuthService._uses_onec_password_login(user):
+            # Linked accounts: never fall back to the old Django hash when
             # 1C rejects a password or its protected service is unavailable.
             identity = OneCPasswordAuthClient().verify_password(
                 phone=phone, password=password,
@@ -44,7 +44,6 @@ class AuthService:
                     'Неверный номер телефона или пароль.'
                 )
 
-            user = User.objects.filter(phone=phone).first()
             # Preserve legacy Django user_id and FK relations. Never trust
             # a phone match alone: 1C's native UUID must be bound locally.
             if (
@@ -146,7 +145,7 @@ class AuthService:
     ) -> None:
         # Do not check an obsolete Django hash or write a new Django hash
         # after this account has switched to 1C password verification.
-        if AuthService._uses_onec_password_login(user.phone):
+        if AuthService._uses_onec_password_login(user):
             raise ValidationError({
                 'newPassword': 'Смена пароля этого аккаунта будет доступна после переноса в 1С.'
             })
