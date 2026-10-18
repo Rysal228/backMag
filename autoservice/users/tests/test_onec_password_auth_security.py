@@ -4,6 +4,7 @@ import os
 from unittest.mock import Mock, patch
 
 from django.test import SimpleTestCase
+from users.auth.serializers import PasswordSerializer
 
 from integrations.services.onec_password_auth import OneCPasswordAuthClient
 from integrations.services.onec_users import OneCUserServiceError
@@ -221,3 +222,14 @@ class OneCPasswordAuthSecurityTests(SimpleTestCase):
                 phone=PHONE, onec_id=NATIVE,
                 current_password="original-123", new_password="replacement-123",
             )
+    def test_password_change_form_requires_current_password(self):
+        serializer = PasswordSerializer(data={"newPassword": "new-synthetic-123"})
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("currentPassword", serializer.errors)
+
+    def test_password_change_form_rejects_oversize_password(self):
+        serializer = PasswordSerializer(data={
+            "currentPassword": "old-synthetic-123", "newPassword": "x" * 129,
+        })
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("newPassword", serializer.errors)
