@@ -134,6 +134,10 @@ class AuthService:
             raise ValidationError({
                 'currentPassword': 'Введите текущий пароль.'
             })
+        if new_password == current_password:
+            raise ValidationError({
+                'newPassword': 'Новый пароль должен отличаться от текущего.'
+            })
 
         changed = OneCPasswordAuthClient().change_password(
             phone=user.phone,
