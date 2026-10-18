@@ -1,4 +1,4 @@
-# Пилот входа Django через текущий ServiceCarAPI 1С
+# Вход Django через текущий ServiceCarAPI 1С
 
 Статус: подготовлено в PR #46, **выключено по умолчанию**, работающий
 вход Django, JWT, MAX и регистрация не переключены.
@@ -23,13 +23,13 @@ ONEC_AUTH_VERIFY_URL=http://host.docker.internal:8081/ServiceCar/hs/api/password
 ONEC_AUTH_ALLOW_INSECURE_INTERNAL_HTTP=1
 ONEC_AUTH_API_USER=
 ONEC_AUTH_API_PASSWORD=
-ONEC_PASSWORD_LOGIN_PILOT_PHONES=
+ONEC_PASSWORD_LOGIN_ENABLED=0
 ```
 
-По умолчанию `ONEC_PASSWORD_LOGIN_PILOT_PHONES` пусто — **все пользователи
+По умолчанию `ONEC_PASSWORD_LOGIN_ENABLED` пусто — **все пользователи
 по-прежнему входят через прежнюю проверку Django**.
 
-Только для пилота поставить в `ONEC_PASSWORD_LOGIN_PILOT_PHONES`
+Только для пилота поставить в `ONEC_PASSWORD_LOGIN_ENABLED`
 номер отдельного тестового аккаунта в формате `7XXXXXXXXXX`
 без `+`. Переменная может содержать несколько номеров через запятую.
 `*` не переводит всех пользователей.
