@@ -170,3 +170,54 @@ class OneCPasswordAuthSecurityTests(SimpleTestCase):
                 phone=PHONE, password="some-secret"
             )
         self.assertEqual(caught.exception.status_code, 502)
+
+    @patch.dict(os.environ, {
+        "ONEC_AUTH_VERIFY_URL": "",
+        "ONEC_AUTH_API_USER": "",
+        "ONEC_AUTH_API_PASSWORD": "",
+    })
+    @patch("integrations.services.onec_password_auth.requests.post")
+    def test_change_password_calls_same_internal_1c_service(self, post):
+        post.return_value = Mock(status_code=200, json=lambda: {
+            "changed": True, "onecId": NATIVE, "phone": PHONE,
+        })
+        result = OneCPasswordAuthClient().change_password(
+            phone=PHONE, onec_id=NATIVE,
+            current_password="original-123", new_password="replacement-123",
+        )
+        self.assertTrue(result)
+        self.assertTrue(post.call_args.args[0].endswith("/password/change"))
+        self.assertIsNone(post.call_args.kwargs["auth"])
+        self.assertFalse(post.call_args.kwargs["allow_redirects"])
+
+    @patch.dict(os.environ, {
+        "ONEC_AUTH_VERIFY_URL": "",
+        "ONEC_AUTH_API_USER": "",
+        "ONEC_AUTH_API_PASSWORD": "",
+    })
+    @patch("integrations.services.onec_password_auth.requests.post")
+    def test_wrong_current_password_rejected_by_1c(self, post):
+        post.return_value = Mock(status_code=200, json=lambda: {"changed": False})
+        result = OneCPasswordAuthClient().change_password(
+            phone=PHONE, onec_id=NATIVE,
+            current_password="wrong-123", new_password="replacement-123",
+        )
+        self.assertFalse(result)
+
+    @patch.dict(os.environ, {
+        "ONEC_AUTH_VERIFY_URL": "",
+        "ONEC_AUTH_API_USER": "",
+        "ONEC_AUTH_API_PASSWORD": "",
+    })
+    @patch("integrations.services.onec_password_auth.requests.post")
+    def test_changed_password_requires_matching_1c_identity(self, post):
+        post.return_value = Mock(status_code=200, json=lambda: {
+            "changed": True,
+            "onecId": "22222222-2222-4222-8222-222222222222",
+            "phone": PHONE,
+        })
+        with self.assertRaises(OneCUserServiceError):
+            OneCPasswordAuthClient().change_password(
+                phone=PHONE, onec_id=NATIVE,
+                current_password="original-123", new_password="replacement-123",
+            )
