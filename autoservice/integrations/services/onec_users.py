@@ -129,38 +129,6 @@ class OneCUsersClient:
             )
         return user
 
-    def _require_password_registration_support(self):
-        """Fail BEFORE creating a user if 1C has not deployed password support."""
-        url = f"{self.base_url}/{self.path}/profile"
-        auth = (self.api_user, self.api_password) if self.api_user else None
-        try:
-            response = requests.request(
-                "GET", url, auth=auth,
-                headers={"Accept": "application/json"},
-                timeout=self.timeout, allow_redirects=False,
-            )
-            if response.status_code != 200:
-                raise OneCUserServiceError(
-                    "onec_registration_unavailable",
-                    "Регистрация паролей ещё не включена в 1С.",
-                    status_code=503,
-                )
-            capabilities = response.json()
-        except (requests.RequestException, ValueError) as exc:
-            raise OneCUserServiceError(
-                "onec_registration_unavailable", "1С недоступна для регистрации.",
-                status_code=503,
-            ) from exc
-        if (
-            not isinstance(capabilities, dict)
-            or capabilities.get("passwordRegistration") is not True
-        ):
-            raise OneCUserServiceError(
-                "onec_registration_unavailable",
-                "Регистрация паролей ещё не включена в 1С.",
-                status_code=503,
-            )
-
     def create_user_with_password(
         self, *, phone, external_id, password, first_name, last_name,
         patronymic="", birthday=None,
@@ -191,9 +159,8 @@ class OneCUsersClient:
             "isActive": True,
             "roles": ["user"],
         }
-        # A preflight prevents old 1C versions from silently ignoring
-        # "password" while still returning HTTP 201 for a passwordless user.
-        self._require_password_registration_support()
+        # The real POST response must confirm the persisted password. An old
+        # 1C module without password support does not return hasPassword.
         url = f"{self.base_url}/{self.path}"
         profile = self._request_user_url("POST", url, payload=payload)
         try:
