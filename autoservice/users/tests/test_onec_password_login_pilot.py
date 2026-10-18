@@ -146,6 +146,17 @@ class OneCPasswordLoginTests(SimpleTestCase):
         user.save.assert_not_called()
 
     @patch('users.auth.services.OneCPasswordAuthClient')
+    def test_same_new_password_rejected_before_1c_call(self, client_type):
+        user = Mock(phone=PHONE, onec_id=UUID(NATIVE), is_active=True)
+        with self.assertRaises(ValidationError) as caught:
+            AuthService.set_password(
+                user=user, current_password='same-password-123',
+                new_password='same-password-123',
+            )
+        self.assertIn('newPassword', caught.exception.detail)
+        client_type.assert_not_called()
+
+    @patch('users.auth.services.OneCPasswordAuthClient')
     def test_max_only_without_onec_id_cannot_change_password(self, client_type):
         user = Mock(phone=PHONE, onec_id=None, is_active=True)
         with self.assertRaises(ValidationError):
