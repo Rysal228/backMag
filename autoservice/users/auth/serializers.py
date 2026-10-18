@@ -81,12 +81,14 @@ class RegisterSerializer(serializers.Serializer):
 class PasswordSerializer(serializers.Serializer):
     currentPassword = serializers.CharField(
         write_only=True,
-        required=False,
-        allow_blank=True,
+        required=True,
+        allow_blank=False,
+        max_length=128,
     )
     newPassword = serializers.CharField(
         write_only=True,
         min_length=8,
+        max_length=128,
     )
 
     def validate_newPassword(self, value):
