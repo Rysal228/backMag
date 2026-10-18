@@ -1,7 +1,9 @@
-"""Password verification through a dedicated, authenticated TLS endpoint in 1C.
+"""1C password-verification client.
 
-Not wired into public Django login until the 1C credential store, protected
-publication and rate limiting have been validated. No local password hashes.
+HTTPS with technical credentials is preferred. A narrowly scoped, explicit
+opt-in exists for the currently deployed internal HTTP service; it carries
+plaintext user passwords over that link and must not be enabled accidentally.
+No local password hashes.
 """
 
 import os
@@ -13,6 +15,13 @@ import requests
 from integrations.services.onec_users import OneCUserServiceError
 
 
+# Only the already-published internal 1C endpoint can use HTTP.
+# Never allow public hosts, arbitrary internal URLs or redirects via this mode.
+INTERNAL_PLAINTEXT_VERIFY_URL = (
+    "http://host.docker.internal:8081/ServiceCar/hs/api/password/verify"
+)
+
+
 class OneCPasswordAuthClient:
     def __init__(self):
         self.url = os.environ.get("ONEC_AUTH_VERIFY_URL", "").strip()
@@ -20,20 +29,33 @@ class OneCPasswordAuthClient:
         self.password = os.environ.get("ONEC_AUTH_API_PASSWORD", "")
         parts = urlsplit(self.url)
 
-        # Fail closed: the existing unauthenticated HTTP integration is not
-        # acceptable for transferring plaintext passwords over the network.
-        if (
-            parts.scheme != "https" or not parts.hostname
-            or parts.username is not None or parts.password is not None
-            or parts.query or parts.fragment
+        self.internal_http = (
+            os.environ.get("ONEC_AUTH_ALLOW_INSECURE_INTERNAL_HTTP") == "1"
+            and self.url == INTERNAL_PLAINTEXT_VERIFY_URL
+        )
+        valid_url = (
+            bool(parts.hostname)
+            and parts.username is None and parts.password is None
+            and not parts.query and not parts.fragment
+        )
+        if not valid_url or (
+            parts.scheme != "https" and not self.internal_http
         ):
             raise OneCUserServiceError(
                 "onec_auth_tls_required",
-                "Не настроен защищённый HTTPS-адрес авторизации 1С.",
+                "Не настроен допустимый адрес авторизации 1С.",
                 status_code=503,
             )
 
-        if not self.username or not self.password:
+        if self.internal_http:
+            # Sending Basic credentials in plaintext is never permitted.
+            if self.username or self.password:
+                raise OneCUserServiceError(
+                    "onec_auth_credentials_not_allowed",
+                    "Не передавайте технический пароль через HTTP.",
+                    status_code=503,
+                )
+        elif not self.username or not self.password:
             raise OneCUserServiceError(
                 "onec_auth_credentials_required",
                 "Не настроена техническая авторизация Django в 1С.",
@@ -60,7 +82,7 @@ class OneCPasswordAuthClient:
             response = requests.post(
                 self.url,
                 json={"phone": phone, "password": password},
-                auth=(self.username, self.password),
+                auth=None if self.internal_http else (self.username, self.password),
                 headers={"Accept": "application/json"},
                 timeout=10,
                 allow_redirects=False,
