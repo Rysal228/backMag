@@ -124,10 +124,27 @@ class AuthService:
         current_password: str | None,
         new_password: str,
     ) -> None:
-        # Never change only Django's obsolete hash: 1C is the password store.
-        raise ValidationError({
-            'newPassword': 'Изменение пароля через сайт пока недоступно. Пароль хранится в 1С.'
-        })
+        # The current password is verified only by 1C. Never write a
+        # Django hash or allow a MAX-only user to bypass credential checks.
+        if not user.is_active or not user.onec_id:
+            raise ValidationError({
+                'newPassword': 'Для аккаунта не настроен пароль в 1С.'
+            })
+        if not current_password:
+            raise ValidationError({
+                'currentPassword': 'Введите текущий пароль.'
+            })
+
+        changed = OneCPasswordAuthClient().change_password(
+            phone=user.phone,
+            onec_id=user.onec_id,
+            current_password=current_password,
+            new_password=new_password,
+        )
+        if not changed:
+            raise ValidationError({
+                'currentPassword': 'Неверный текущий пароль.'
+            })
 
 
 class PhoneNormalizer:
