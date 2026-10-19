@@ -2,7 +2,7 @@
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from integrations.services.onec_users import OneCUsersClient
+from integrations.services.onec_users import OneCUsersClient, OneCUserServiceError
 from users.auth.identity import sync_native_user
 
 
@@ -12,7 +12,12 @@ def validate_native_claims(token):
     user_id, role = token.get("user_id"), token.get("active_role")
     if not user_id or not role:
         raise AuthenticationFailed("Недействительная сессия.")
-    profile = OneCUsersClient().get_user_by_onec_id(user_id)
+    try:
+        profile = OneCUsersClient().get_user_by_onec_id(user_id)
+    except OneCUserServiceError as exc:
+        if exc.status_code == 404:
+            raise AuthenticationFailed("Сессия больше не действительна.") from exc
+        raise
     user = sync_native_user(profile)
     if not user.has_role(role):
         raise AuthenticationFailed("Активная роль больше не назначена пользователю.")
