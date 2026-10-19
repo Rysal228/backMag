@@ -421,7 +421,7 @@ class OrderMechanic(models.Model):
                 name='unique_order_native_mechanic',
             ),
         ]
-        indexes = [models.Index(fields=('mechanic_id', 'order'))]
+        indexes = [models.Index(fields=('mechanic_id', 'order'), name='order_mechanic_native_idx')]
 
     def __str__(self):
         return f'{self.order_id}: {self.mechanic_id}'
