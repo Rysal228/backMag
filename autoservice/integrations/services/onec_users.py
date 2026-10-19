@@ -131,7 +131,7 @@ class OneCUsersClient:
 
     def create_user_with_password(
         self, *, phone, external_id, password, first_name, last_name,
-        patronymic="", birthday=None,
+        patronymic="", birthday=None, messenger_user_id="", roles=None,
     ):
         """Create the 1C catalog element, roles and password in one 1C transaction.
 
@@ -148,6 +148,14 @@ class OneCUsersClient:
                 status_code=400,
             )
         native_django_id = str(UUID(str(external_id)))
+        assigned_roles = sorted(set(roles if roles is not None else ["user"]))
+        if not assigned_roles or not set(assigned_roles).issubset(
+            {"user", "mechanic", "admin"}
+        ):
+            raise OneCUserServiceError(
+                "onec_invalid_roles", "Некорректные роли пользователя.",
+                status_code=400,
+            )
         payload = {
             "phone": normalized,
             "externalId": native_django_id,
@@ -157,8 +165,10 @@ class OneCUsersClient:
             "patronymic": patronymic,
             "birthday": birthday.isoformat() if birthday else None,
             "isActive": True,
-            "roles": ["user"],
+            "roles": assigned_roles,
         }
+        if messenger_user_id:
+            payload["messengerUserId"] = str(messenger_user_id)
         # The real POST response must confirm the persisted password. An old
         # 1C module without password support does not return hasPassword.
         url = f"{self.base_url}/{self.path}"
@@ -173,8 +183,10 @@ class OneCUsersClient:
             profile.get("phone") != normalized
             or profile.get("externalId") != native_django_id
             or profile.get("isActive") is not True
-            or profile.get("roles") != ["user"]
+            or sorted(profile.get("roles", [])) != assigned_roles
             or profile.get("hasPassword") is not True
+            or (messenger_user_id and
+                profile.get("messengerUserId") != str(messenger_user_id))
         ):
             raise OneCUserServiceError(
                 "onec_identity_mismatch", "1С вернула несовпадающую учётную запись."

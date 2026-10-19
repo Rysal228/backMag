@@ -116,6 +116,7 @@ class PasswordView(APIView):
             user=request.user,
             current_password=serializer.validated_data.get('currentPassword'),
             new_password=serializer.validated_data['newPassword'],
+            token=request.auth,
         )
 
         return Response(

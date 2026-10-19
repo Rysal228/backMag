@@ -81,8 +81,8 @@ class RegisterSerializer(serializers.Serializer):
 class PasswordSerializer(serializers.Serializer):
     currentPassword = serializers.CharField(
         write_only=True,
-        required=True,
-        allow_blank=False,
+        required=False,
+        allow_blank=True,
         max_length=128,
     )
     newPassword = serializers.CharField(
