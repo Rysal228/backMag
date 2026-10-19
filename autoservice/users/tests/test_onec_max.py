@@ -90,6 +90,44 @@ class MaxTransferTests(TestCase):
         user.refresh_from_db()
         self.assertEqual(str(user.onec_id), ONEC_ID)
 
+    def test_recreated_onec_account_relinks_verified_max_user(self):
+        old_native_id = UUID("a9d95012-e69d-440e-8725-a3db7d8f8899")
+        user = CustomUser.objects.create_user(
+            id=UUID(EXTERNAL_ID), phone=PHONE, password=None,
+            onec_id=old_native_id, messenger_user_id=MAX_ID,
+        )
+        with patch("users.auth.max.services.MaxInitDataValidator.validate",
+                   return_value=SimpleNamespace(user_id=int(MAX_ID))), \
+             patch("users.auth.max.services.OneCMaxClient") as gateway, \
+             patch("users.auth.max.services.create_max_auth_tokens",
+                   return_value={"accessToken": "a", "refreshToken": "r"}):
+            gateway.return_value.resolve.return_value = profile()
+            result = MaxAuthService.authenticate(init_data="signed")
+        self.assertIn("accessToken", result)
+        user.refresh_from_db()
+        self.assertEqual(user.pk, UUID(EXTERNAL_ID))
+        self.assertEqual(str(user.onec_id), ONEC_ID)
+        self.assertEqual(user.messenger_user_id, MAX_ID)
+
+    def test_recreated_onec_id_cannot_replace_another_users_binding(self):
+        old_native_id = UUID("a9d95012-e69d-440e-8725-a3db7d8f8899")
+        CustomUser.objects.create_user(
+            id=UUID(EXTERNAL_ID), phone=PHONE, password=None,
+            onec_id=old_native_id, messenger_user_id=MAX_ID,
+        )
+        CustomUser.objects.create_user(
+            phone="79135552626", password=None, onec_id=UUID(ONEC_ID),
+        )
+        with self.assertRaises(MaxAccountConflict), \
+             patch("users.auth.max.services.MaxInitDataValidator.validate",
+                   return_value=SimpleNamespace(user_id=int(MAX_ID))), \
+             patch("users.auth.max.services.OneCMaxClient") as gateway:
+            gateway.return_value.resolve.return_value = profile()
+            MaxAuthService.authenticate(init_data="signed")
+        self.assertEqual(
+            CustomUser.objects.get(pk=UUID(EXTERNAL_ID)).onec_id, old_native_id
+        )
+
     def test_different_local_user_with_same_phone_blocks_token(self):
         CustomUser.objects.create_user(phone=PHONE, password=None)
         with self.assertRaises(MaxAccountConflict), \
@@ -164,13 +202,9 @@ class MaxTransferTests(TestCase):
 
 
 class OneCMaxClientTests(SimpleTestCase):
-    @patch.dict("os.environ", {
-        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8081/ServiceCar/hs/api",
-        "ONEC_MAX_API_USER": "servicecar-auth",
-        "ONEC_MAX_API_PASSWORD": "password",
-    })
+    @patch.dict("os.environ", {}, clear=True)
     @patch("integrations.services.onec_max.requests.post")
-    def test_existing_internal_apache_http_api_is_supported(self, post):
+    def test_existing_internal_apache_http_without_basic_auth(self, post):
         post.return_value = Mock(status_code=200, json=lambda: {
             "status": "ok", "user": profile(),
         })
@@ -181,79 +215,37 @@ class OneCMaxClientTests(SimpleTestCase):
             post.call_args.args[0],
             "http://host.docker.internal:8081/ServiceCar/hs/api/max/resolve",
         )
-        self.assertEqual(
-            post.call_args.kwargs["auth"], ("servicecar-auth", "password")
-        )
+        self.assertNotIn("auth", post.call_args.kwargs)
         self.assertFalse(post.call_args.kwargs["allow_redirects"])
-
-    @patch.dict("os.environ", {
-        "ONEC_MAX_BASE_URL": "http://onec.example.test/ServiceCar/hs/api",
-        "ONEC_MAX_API_USER": "servicecar-auth",
-        "ONEC_MAX_API_PASSWORD": "password",
-    })
-    def test_http_on_other_hosts_is_rejected(self):
-        with self.assertRaises(OneCMaxError):
-            OneCMaxClient()
-
-    @patch.dict("os.environ", {
-        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8082/ServiceCar/hs/api",
-        "ONEC_MAX_API_USER": "servicecar-auth",
-        "ONEC_MAX_API_PASSWORD": "password",
-    })
-    def test_http_on_other_ports_is_rejected(self):
-        with self.assertRaises(OneCMaxError):
-            OneCMaxClient()
-
-    @patch.dict("os.environ", {
-        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8081/ServiceCar/hs/api",
-        "ONEC_MAX_API_USER": "servicecar-auth",
-        "ONEC_MAX_API_PASSWORD": "",
-    })
-    def test_basic_credentials_remain_required(self):
-        with self.assertRaises(OneCMaxError):
-            OneCMaxClient()
-
-    @patch.dict("os.environ", {
-        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8081/ServiceCar/hs/api",
-        "ONEC_MAX_API_USER": "servicecar-auth",
-        "ONEC_MAX_API_PASSWORD": "password",
-    })
-    def test_default_internal_url_when_env_unset(self):
-        with patch.dict("os.environ", {}, clear=True):
-            with patch.dict("os.environ", {
-                "ONEC_AUTH_API_USER": "servicecar-auth",
-                "ONEC_AUTH_API_PASSWORD": "password",
-            }):
-                client = OneCMaxClient()
-        self.assertEqual(
-            client.base_url, "http://host.docker.internal:8081/ServiceCar/hs/api"
-        )
-        self.assertEqual(
-            (client.username, client.password), ("servicecar-auth", "password")
-        )
-
-    @patch.dict("os.environ", {
-        "ONEC_MAX_BASE_URL": "https://onec.example.test/ServiceCar/hs/api",
-        "ONEC_MAX_API_USER": "servicecar-auth",
-        "ONEC_MAX_API_PASSWORD": "password",
-    })
-    @patch("integrations.services.onec_max.requests.post")
-    def test_https_also_supported_and_never_follows_redirect(self, post):
-        post.return_value = Mock(status_code=200, json=lambda: {
-            "status": "ok", "user": profile(),
-        })
-        self.assertEqual(
-            OneCMaxClient().resolve(messenger_user_id=MAX_ID), profile()
-        )
-        self.assertFalse(post.call_args.kwargs["allow_redirects"])
-        self.assertEqual(post.call_args.kwargs["auth"][0], "servicecar-auth")
         self.assertEqual(post.call_args.kwargs["timeout"], 10)
 
     @patch.dict("os.environ", {
-        "ONEC_MAX_BASE_URL": "https://onec.example.test/ServiceCar/hs/api",
-        "ONEC_MAX_API_USER": "servicecar-auth",
-        "ONEC_MAX_API_PASSWORD": "password",
-    })
+        "ONEC_BASE_URL": "http://onec-internal:8081",
+    }, clear=True)
+    @patch("integrations.services.onec_max.requests.post")
+    def test_max_uses_existing_onec_base_url(self, post):
+        post.return_value = Mock(status_code=200, json=lambda: {
+            "status": "ok", "user": profile(),
+        })
+        OneCMaxClient().resolve(messenger_user_id=MAX_ID)
+        self.assertEqual(
+            post.call_args.args[0],
+            "http://onec-internal:8081/ServiceCar/hs/api/max/resolve",
+        )
+        self.assertNotIn("auth", post.call_args.kwargs)
+
+    @patch.dict("os.environ", {
+        "ONEC_MAX_API_USER": "legacy-user",
+        "ONEC_MAX_API_PASSWORD": "legacy-password",
+        "ONEC_MAX_BASE_URL": "http://wrong-host/ServiceCar/hs/auth",
+    }, clear=True)
+    def test_legacy_max_settings_no_longer_required_or_used(self):
+        client = OneCMaxClient()
+        self.assertEqual(
+            client.base_url, "http://host.docker.internal:8081/ServiceCar/hs/api"
+        )
+
+    @patch.dict("os.environ", {}, clear=True)
     @patch("integrations.services.onec_max.requests.post")
     def test_conflict_from_1c_stays_conflict_not_local_fallback(self, post):
         post.return_value = Mock(
