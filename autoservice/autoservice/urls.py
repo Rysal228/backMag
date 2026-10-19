@@ -6,7 +6,6 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 
 urlpatterns = [
@@ -17,8 +16,6 @@ urlpatterns = [
     path('api/v1/chats/', include('chats.urls')),
     path('api/v1/news/', include('news.urls')),
     path('api/v1/integrations/1c/', include('integrations.urls')),
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
 
 if settings.DEBUG:
