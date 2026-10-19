@@ -1,4 +1,4 @@
-from users.models import CustomUser, UserRole
+from users.models import UserRole
 from django.contrib import admin
 from django.db import transaction
 
@@ -6,6 +6,7 @@ from orders.models import (
     AppointmentSettings,
     BusySlot,
     Order,
+    OrderMechanic,
     OrderFilterPermission,
     OrderStatus,
     ScheduleBlock,
@@ -124,16 +125,21 @@ class OrderWorkInline(admin.TabularInline):
         return 'Справочник' if obj.work_type_id else 'Кастомная'
 
 
+class OrderMechanicInline(admin.TabularInline):
+    model = OrderMechanic
+    extra = 0
+    fields = ('mechanic_id',)
+
+
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('order_number', 'customer', 'car', 'mechanics_display', 'work_types_display', 'status', 'work_status', 'appointment_at', 'total_price_display')
-    list_filter = ('status', 'work_status', 'works__work_type', 'mechanics')
+    list_display = ('order_number', 'customer_id', 'car', 'mechanics_display', 'work_types_display', 'status', 'work_status', 'appointment_at', 'total_price_display')
+    list_filter = ('status', 'work_status', 'works__work_type')
     search_fields = (
-        'order_number', 'customer__phone', 'car__plate_number',
-        'mechanics__phone', 'mechanics__last_name', 'mechanics__first_name',
+        'order_number', 'customer_phone_snapshot', 'customer_name_snapshot',
+        'car__plate_number',
     )
-    filter_horizontal = ('mechanics',)
-    inlines = (OrderWorkInline,)
+    inlines = (OrderWorkInline, OrderMechanicInline)
 
     @admin.display(description='Итого')
     def total_price_display(self, obj):
@@ -141,22 +147,12 @@ class OrderAdmin(admin.ModelAdmin):
 
     @admin.display(description='Специалисты')
     def mechanics_display(self, obj):
-        return ', '.join(
-            mechanic.get_full_name() or mechanic.phone
-            for mechanic in obj.mechanics.all()
-        )
+        return ', '.join(str(assignment.mechanic_id)
+                         for assignment in obj.mechanic_links.all())
 
     @admin.display(description='Типы работ')
     def work_types_display(self, obj):
         return ', '.join(obj.works.values_list('name', flat=True))
-
-    def formfield_for_manytomany(self, db_field, request, **kwargs):
-        if db_field.name == 'mechanics':
-            kwargs['queryset'] = CustomUser.objects.filter(
-                role_assignments__role=UserRole.MECHANIC,
-            ).distinct()
-
-        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     @transaction.atomic
     def save_model(self, request, obj, form, change):
