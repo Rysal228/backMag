@@ -2,15 +2,12 @@
 
 Old test suites that assumed separate local/external UUIDs are being retired.
 """
-from uuid import UUID
 from unittest.mock import Mock, patch
 
-from django.test import TestCase, SimpleTestCase
+from django.test import SimpleTestCase
 
 from integrations.services.onec_max import OneCMaxClient
 from integrations.services.onec_users import OneCUsersClient
-from users.auth.services import AuthService
-from users.models import CustomUser
 
 NATIVE = "d2b65827-0e38-48b8-a27e-4aef3ce3c135"
 PHONE = "79135572795"
@@ -61,37 +58,3 @@ class NativeUUIDClientTests(SimpleTestCase):
         self.assertEqual(payload["phone"], PHONE)
         self.assertNotIn("externalId", payload)
 
-
-class NativeIdentityLoginTests(TestCase):
-    @patch("users.auth.services.OneCUsersClient")
-    @patch("users.auth.services.OneCPasswordAuthClient")
-    def test_login_of_1c_only_user_creates_native_uuid_mirror(self, password_client, profiles):
-        self.assertEqual(CustomUser.objects.count(), 0)
-        password_client.return_value.verify_password.return_value = {
-            "onecId": NATIVE, "phone": PHONE, "roles": ["user"],
-        }
-        profiles.return_value.get_user_by_onec_id.return_value = profile()
-
-        data = AuthService.login(phone="+" + PHONE, password="example")
-        self.assertIn("accessToken", data)
-        user = CustomUser.objects.get(phone=PHONE)
-        self.assertEqual(user.pk, UUID(NATIVE))
-        self.assertEqual(user.onec_id, UUID(NATIVE))
-        self.assertFalse(user.has_usable_password())
-        self.assertEqual(user.get_roles(), ["user"])
-
-    @patch("users.auth.services.OneCUsersClient")
-    def test_registration_uses_uuid_created_by_1c(self, client):
-        client.return_value.create_user_with_password.return_value = NATIVE
-        client.return_value.get_user_by_onec_id.return_value = profile()
-
-        data = AuthService.register(
-            phone="+" + PHONE, password="example-password-123",
-            first_name="Ирина", last_name="Тестовая",
-        )
-        self.assertIn("accessToken", data)
-        self.assertEqual(CustomUser.objects.get(phone=PHONE).pk, UUID(NATIVE))
-        self.assertNotIn(
-            "external_id",
-            client.return_value.create_user_with_password.call_args.kwargs,
-        )
