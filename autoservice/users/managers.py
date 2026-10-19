@@ -1,0 +1,52 @@
+# Historical migration dependency. Do not delete while migrations/0002_* imports
+# users.managers.CustomUserManager; application users now live exclusively in 1C.
+from django.contrib.auth.base_user import BaseUserManager
+
+
+class CustomUserManager(BaseUserManager):
+    use_in_migrations = True
+
+    def create_user(self, phone, password=None, **extra_fields):
+        if not phone:
+            raise ValueError('Phone is required')
+
+        user = self.model(
+            phone=phone,
+            **extra_fields,
+        )
+
+        user.set_password(password)
+        user.save(using=self._db)
+
+        from .models import UserRole, UserRoleAssignment
+
+        UserRoleAssignment.objects.get_or_create(
+            user=user,
+            role=UserRole.USER,
+        )
+
+        return user
+
+    def create_superuser(self, phone, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_active', True)
+
+        user = self.create_user(
+            phone,
+            password,
+            **extra_fields,
+        )
+
+        from .models import UserRole, UserRoleAssignment
+
+        UserRoleAssignment.objects.filter(
+            user=user,
+            role=UserRole.USER,
+        ).delete()
+        UserRoleAssignment.objects.get_or_create(
+            user=user,
+            role=UserRole.ADMIN,
+        )
+
+        return user
