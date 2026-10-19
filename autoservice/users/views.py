@@ -1,78 +1,59 @@
-from rest_framework import viewsets, permissions, status
-from rest_framework.exceptions import ValidationError
-from .models import UserRole
-from integrations.services.onec_users import OneCUsersClient
-from .onec_profile_views import OneCProfileView
-from django.contrib.auth import get_user_model
-from rest_framework.views import APIView
-from rest_framework_simplejwt.tokens import RefreshToken
+"""Read users from 1C; logout refresh tokens without ORM application users."""
+from uuid import UUID
+
+from rest_framework import permissions, status
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework.views import APIView
 
-from .serializers import CustomUserSerializer
+from integrations.services.onec_users import OneCUsersClient
+from users.models import UserRole
+from users.onec_profile_views import OneCProfileView
+from users.auth.tokens import revoke_refresh_token
 
 
-User = get_user_model()
-
-
-class CustomUserViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = User.objects.all()
-    serializer_class = CustomUserSerializer
+class UserListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def list(self, request, *args, **kwargs):
-        # The mechanics roster always comes from 1C. Other user lists are transitional.
-        if request.query_params.get('role') == UserRole.MECHANIC:
-            client = OneCUsersClient()
-            current = client.get_user(request.user.phone)
-            OneCProfileView._check_identity(request, current)
-            search = request.query_params.get('search', '').strip()
-            ids = [value.strip() for value in
-                   request.query_params.get('ids', '').split(',')
-                   if value.strip()]
-            return Response(client.list_mechanics(search=search, ids=ids))
-
-        return super().list(request, *args, **kwargs)
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-
-        role = self.request.query_params.get('role')
-
-        if not role:
-            return queryset
-
-        if role not in UserRole.values:
+    def get(self, request):
+        if request.query_params.get('role') != UserRole.MECHANIC:
+            # Only the 1C roster exists. Never fall back to a Django user table.
             raise ValidationError({
-                'role': 'Invalid user role.',
+                'role': 'Поддерживается только список специалистов (role=mechanic).',
             })
+        current = OneCUsersClient().get_user_by_onec_id(request.user.pk)
+        OneCProfileView._check_identity(request, current)
+        search = request.query_params.get('search', '').strip()
+        ids = [value.strip() for value in
+               request.query_params.get('ids', '').split(',')
+               if value.strip()]
+        return Response(OneCUsersClient().list_mechanics(search=search, ids=ids))
 
-        # Never expose a stale local mechanics record via a detail lookup.
-        if role == UserRole.MECHANIC:
-            return queryset.none()
 
-        return queryset.filter(role_assignments__role=role).distinct()
+class UserDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, user_id):
+        # Only managers may inspect a different user's phone/name.
+        if request.active_role != UserRole.ADMIN and user_id != request.user.id:
+            raise PermissionDenied('Нет доступа к данным другого пользователя.')
+        profile = OneCUsersClient().get_user_by_onec_id(user_id)
+        return Response({
+            'id': profile['onecId'],
+            'phone': profile['phone'],
+            'firstName': profile.get('firstName', ''),
+            'lastName': profile.get('lastName', ''),
+            'patronymic': profile.get('patronymic', ''),
+            'birthday': profile.get('birthday'),
+        })
 
 
 class LogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        refresh_token = request.data.get('refreshToken')
-
-        if not refresh_token:
-            raise ValidationError({
-                'refreshToken': 'Refresh token is required.',
-            })
-
-        try:
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-        except TokenError:
-            raise ValidationError({
-                'refreshToken': 'Invalid refresh token.',
-            })
-
-        return Response(
-            status=status.HTTP_204_NO_CONTENT,
-        )
+        raw = request.data.get('refreshToken')
+        if not isinstance(raw, str) or not raw:
+            raise ValidationError({'refreshToken': 'Refresh token is required.'})
+        revoke_refresh_token(raw, user=request.user, access_token=request.auth)
+        return Response(status=status.HTTP_204_NO_CONTENT)

@@ -1,4 +1,5 @@
 from django.urls import include, path
+from users.views import LogoutView
 
 from .views import (
     LoginView,
@@ -15,6 +16,7 @@ urlpatterns = [
     path('switch-role/', SwitchRoleView.as_view()),
     path('select-role/', RoleSelectionEndpointView.as_view()),
     path('password/', PasswordView.as_view()),
+    path('logout/', LogoutView.as_view()),
     path('max/', include('users.auth.max.urls')),
     path('token/refresh/', RefreshTokenView.as_view()),
 ]
