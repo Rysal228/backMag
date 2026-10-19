@@ -32,4 +32,9 @@ class MaxBotClient:
                 f'MAX Bot API request failed: {exc}'
             ) from exc
 
-        return response.json()
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise MaxBotApiError(
+                "MAX Bot API returned invalid JSON"
+            ) from exc
