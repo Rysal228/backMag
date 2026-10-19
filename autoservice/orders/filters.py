@@ -56,8 +56,7 @@ class OrderFilter(django_filters.FilterSet):
             search_query |= Q(car_plate_number_snapshot__icontains=value)
 
         if self.request.active_role in ('mechanic', 'admin'):
-            search_query |= Q(customer__phone__icontains=value)
-            search_query |= Q(customer__first_name__icontains=value)
-            search_query |= Q(customer__last_name__icontains=value)
+            search_query |= Q(customer_phone_snapshot__icontains=value)
+            search_query |= Q(customer_name_snapshot__icontains=value)
 
         return queryset.filter(search_query).distinct()

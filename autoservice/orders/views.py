@@ -90,18 +90,17 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Order.objects.select_related(
-            'customer',
             'car__brand',
             'car__model',
             'status',
             'work_status',
             'payment_status',
-        ).prefetch_related('works__work_type', 'mechanics')
+        ).prefetch_related('works__work_type', 'mechanic_links')
 
         if self.request.active_role in ('mechanic', 'admin'):
             return queryset.order_by('-created_at')
 
-        return queryset.filter(customer=self.request.user).order_by('-created_at')
+        return queryset.filter(customer_id=self.request.user.id).order_by('-created_at')
 
     def filter_queryset(self, queryset):
         validate_filter_permissions(self.request)

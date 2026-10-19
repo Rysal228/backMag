@@ -13,6 +13,7 @@ from orders.pagination import OrderPagination
 from orders.permissions import validate_filter_permissions
 from orders.serializers import OrderSerializer
 from users.auth.services import PhoneNormalizer
+from integrations.services.onec_users import OneCUsersClient
 from users.models import UserRole
 
 
@@ -47,10 +48,10 @@ class CarViewSet(viewsets.ModelViewSet):
         status = self.request.query_params.get('status')
 
         if active_role == UserRole.USER:
-            queryset = queryset.filter(owner=self.request.user)
+            queryset = queryset.filter(owner_id=self.request.user.id)
         elif active_role == UserRole.MECHANIC:
             queryset = queryset.filter(
-                orders__mechanics=self.request.user,
+                orders__mechanic_links__mechanic_id=self.request.user.id,
             ).distinct()
 
         if status not in {'active', 'archived', 'all'}:
@@ -65,7 +66,8 @@ class CarViewSet(viewsets.ModelViewSet):
             owner_phone = self.request.query_params.get('owner_phone')
             if owner_phone:
                 owner_phone = PhoneNormalizer.normalize(owner_phone)
-                queryset = queryset.filter(owner__phone__icontains=owner_phone)
+                profile = OneCUsersClient().get_user(owner_phone)
+                queryset = queryset.filter(owner_id=profile["onecId"])
 
         brand_id = self.request.query_params.get('brand')
         if brand_id:
@@ -90,7 +92,7 @@ class CarViewSet(viewsets.ModelViewSet):
         if plate_number:
             queryset = queryset.filter(plate_number__icontains=plate_number.strip())
 
-        return queryset.select_related('owner', 'brand', 'model').order_by(
+        return queryset.select_related('brand', 'model').order_by(
             'brand__name',
             'model__name',
             'id',
@@ -145,7 +147,7 @@ class CarViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def orders(self, request, pk=None):
         if request.active_role == UserRole.USER:
-            car = get_object_or_404(Car, pk=pk, owner=request.user)
+            car = get_object_or_404(Car, pk=pk, owner_id=request.user.id)
         else:
             car = self.get_object()
 
@@ -159,13 +161,12 @@ class CarViewSet(viewsets.ModelViewSet):
                 'status',
                 'work_status',
                 'payment_status',
-                'customer',
-                'busy_slot',
+                    'busy_slot',
             )
             .prefetch_related(
                 'works__work_type',
             )
-            .filter(customer=request.user)
+            .filter(customer_id=request.user.id)
             .order_by('-created_at')
         )
         orders = OrderFilter(request.query_params, queryset=orders, request=request).qs

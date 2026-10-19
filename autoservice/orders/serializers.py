@@ -7,10 +7,12 @@ from rest_framework.exceptions import PermissionDenied
 from cars.models import Car
 from orders.services.appointment_availability import AppointmentAvailabilityService
 from orders.services.order_workflow import OrderWorkflowService
-from users.models import CustomUser, UserRole
+from users.models import UserRole
+from integrations.services.onec_users import OneCUsersClient
 from orders.models import (
     AppointmentSettings,
     Order,
+    OrderMechanic,
     OrderStatus,
     ScheduleBlock,
     WeekdaySchedule,
@@ -173,12 +175,8 @@ class OrderSerializer(serializers.ModelSerializer):
     orderNumber = serializers.CharField(source='order_number', read_only=True)
     carName = serializers.SerializerMethodField()
     ownerPhone = serializers.SerializerMethodField()
-    mechanics = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=CustomUser.objects.filter(
-            role_assignments__role=UserRole.MECHANIC,
-        ).distinct(),
-        required=False,
+    mechanics = serializers.ListField(
+        child=serializers.UUIDField(), source='mechanic_ids', required=False,
     )
     carYear = serializers.IntegerField(source='car_year_snapshot', read_only=True)
     carVin = serializers.CharField(source='car_vin_snapshot', read_only=True, allow_null=True)
@@ -253,7 +251,7 @@ class OrderSerializer(serializers.ModelSerializer):
         return f'{obj.car_brand_snapshot} {obj.car_model_snapshot}'
 
     def get_ownerPhone(self, obj):
-        return obj.customer.phone
+        return obj.customer_phone_snapshot
 
     def get_price(self, obj):
         return obj.works.aggregate(total=Sum('price'))['total'] or 0
@@ -298,11 +296,32 @@ class OrderSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'appointmentAt': 'Изменение даты записи недоступно на текущем этапе заказа.'})
         if ('works' in attrs or 'workTypes' in attrs) and not OrderWorkflowService.can_edit_works(instance, request):
             raise serializers.ValidationError({'works': 'Изменение работ недоступно на текущем этапе заказа.'})
-        if 'mechanics' in attrs and not OrderWorkflowService.can_assign_mechanics(instance, request):
+        if 'mechanic_ids' in attrs and not OrderWorkflowService.can_assign_mechanics(instance, request):
             raise serializers.ValidationError({'mechanics': 'Изменение специалистов недоступно на текущем этапе заказа.'})
         if 'description' in attrs and not OrderWorkflowService.can_edit_description(instance, request):
             raise serializers.ValidationError({'description': 'Изменение описания недоступно на текущем этапе заказа.'})
         return attrs
+
+    def validate_mechanics(self, values):
+        if len(values) != len(set(values)):
+            raise serializers.ValidationError(
+                "Нельзя назначить одного специалиста дважды."
+            )
+        client = OneCUsersClient()
+        for identifier in values:
+            profile = client.get_user_by_onec_id(identifier)
+            if profile.get('isActive') is not True or 'mechanic' not in profile.get('roles', []):
+                raise serializers.ValidationError(
+                    "Один из выбранных пользователей не является активным специалистом."
+                )
+        return values
+
+    @staticmethod
+    def _save_mechanics(order, identifiers):
+        OrderMechanic.objects.filter(order=order).delete()
+        OrderMechanic.objects.bulk_create(
+            [OrderMechanic(order=order, mechanic_id=identifier) for identifier in identifiers]
+        )
 
     @transaction.atomic
     def create(self, validated_data):
@@ -314,7 +333,7 @@ class OrderSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'status': 'Начальный статус заказа не настроен в системе.'})
         works = validated_data.pop('works', None)
         work_type_names = validated_data.pop('workTypes', None)
-        mechanics = validated_data.pop('mechanics', [])
+        mechanics = validated_data.pop('mechanic_ids', [])
         car = validated_data['car']
         if works is None:
             if work_type_names is None:
@@ -328,7 +347,9 @@ class OrderSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'paymentStatus': 'Начальный статус оплаты не настроен в системе.'})
         order = Order.objects.create(
             order_number=self._generate_order_number(),
-            customer=request.user,
+            customer_id=request.user.id,
+            customer_phone_snapshot=request.user.phone,
+            customer_name_snapshot=request.user.get_full_name() or request.user.phone,
             status=status,
             work_status=work_status,
             payment_status=payment_status,
@@ -340,7 +361,7 @@ class OrderSerializer(serializers.ModelSerializer):
             **validated_data,
         )
         self._replace_order_works(order, works)
-        order.mechanics.set(mechanics)
+        self._save_mechanics(order, mechanics)
         AppointmentAvailabilityService.sync_order_busy_slot(order)
         return order
 
@@ -349,7 +370,7 @@ class OrderSerializer(serializers.ModelSerializer):
         appointment_changed = 'appointment_at' in validated_data
         works = validated_data.pop('works', None)
         work_type_names = validated_data.pop('workTypes', None)
-        mechanics = validated_data.pop('mechanics', None)
+        mechanics = validated_data.pop('mechanic_ids', None)
         order = super().update(instance, validated_data)
         if works is None and work_type_names is not None:
             works = [{'name': name, 'price': 0} for name in work_type_names]
