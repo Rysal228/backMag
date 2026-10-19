@@ -139,6 +139,12 @@ class AuthService:
                 'currentPassword': 'Для создания пароля подтвердите вход через MAX.'
             })
 
+        # Compatibility for pre-migration MAX sessions with no 1C identity.
+        # The subsequent 1C password setup path still checks native identity,
+        # externalId, phone and MAX ID before creating a password.
+        if not user.onec_id:
+            return
+
         from .max.services import MaxAuthService
         try:
             MaxAuthService.validate_current_binding(
