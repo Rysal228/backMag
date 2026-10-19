@@ -165,12 +165,12 @@ class MaxTransferTests(TestCase):
 
 class OneCMaxClientTests(SimpleTestCase):
     @patch.dict("os.environ", {
-        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8081/ServiceCar/hs/auth",
+        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8081/ServiceCar/hs/api",
         "ONEC_MAX_API_USER": "servicecar-auth",
         "ONEC_MAX_API_PASSWORD": "password",
     })
     @patch("integrations.services.onec_max.requests.post")
-    def test_existing_internal_apache_http_is_supported(self, post):
+    def test_existing_internal_apache_http_api_is_supported(self, post):
         post.return_value = Mock(status_code=200, json=lambda: {
             "status": "ok", "user": profile(),
         })
@@ -179,7 +179,7 @@ class OneCMaxClientTests(SimpleTestCase):
         )
         self.assertEqual(
             post.call_args.args[0],
-            "http://host.docker.internal:8081/ServiceCar/hs/auth/max/resolve",
+            "http://host.docker.internal:8081/ServiceCar/hs/api/max/resolve",
         )
         self.assertEqual(
             post.call_args.kwargs["auth"], ("servicecar-auth", "password")
@@ -187,7 +187,7 @@ class OneCMaxClientTests(SimpleTestCase):
         self.assertFalse(post.call_args.kwargs["allow_redirects"])
 
     @patch.dict("os.environ", {
-        "ONEC_MAX_BASE_URL": "http://onec.example.test/ServiceCar/hs/auth",
+        "ONEC_MAX_BASE_URL": "http://onec.example.test/ServiceCar/hs/api",
         "ONEC_MAX_API_USER": "servicecar-auth",
         "ONEC_MAX_API_PASSWORD": "password",
     })
@@ -196,7 +196,7 @@ class OneCMaxClientTests(SimpleTestCase):
             OneCMaxClient()
 
     @patch.dict("os.environ", {
-        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8082/ServiceCar/hs/auth",
+        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8082/ServiceCar/hs/api",
         "ONEC_MAX_API_USER": "servicecar-auth",
         "ONEC_MAX_API_PASSWORD": "password",
     })
@@ -205,7 +205,7 @@ class OneCMaxClientTests(SimpleTestCase):
             OneCMaxClient()
 
     @patch.dict("os.environ", {
-        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8081/ServiceCar/hs/auth",
+        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8081/ServiceCar/hs/api",
         "ONEC_MAX_API_USER": "servicecar-auth",
         "ONEC_MAX_API_PASSWORD": "",
     })
@@ -214,7 +214,7 @@ class OneCMaxClientTests(SimpleTestCase):
             OneCMaxClient()
 
     @patch.dict("os.environ", {
-        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8081/ServiceCar/hs/auth",
+        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8081/ServiceCar/hs/api",
         "ONEC_MAX_API_USER": "servicecar-auth",
         "ONEC_MAX_API_PASSWORD": "password",
     })
@@ -226,14 +226,14 @@ class OneCMaxClientTests(SimpleTestCase):
             }):
                 client = OneCMaxClient()
         self.assertEqual(
-            client.base_url, "http://host.docker.internal:8081/ServiceCar/hs/auth"
+            client.base_url, "http://host.docker.internal:8081/ServiceCar/hs/api"
         )
         self.assertEqual(
             (client.username, client.password), ("servicecar-auth", "password")
         )
 
     @patch.dict("os.environ", {
-        "ONEC_MAX_BASE_URL": "https://onec.example.test/ServiceCar/hs/auth",
+        "ONEC_MAX_BASE_URL": "https://onec.example.test/ServiceCar/hs/api",
         "ONEC_MAX_API_USER": "servicecar-auth",
         "ONEC_MAX_API_PASSWORD": "password",
     })
@@ -250,7 +250,7 @@ class OneCMaxClientTests(SimpleTestCase):
         self.assertEqual(post.call_args.kwargs["timeout"], 10)
 
     @patch.dict("os.environ", {
-        "ONEC_MAX_BASE_URL": "https://onec.example.test/ServiceCar/hs/auth",
+        "ONEC_MAX_BASE_URL": "https://onec.example.test/ServiceCar/hs/api",
         "ONEC_MAX_API_USER": "servicecar-auth",
         "ONEC_MAX_API_PASSWORD": "password",
     })
