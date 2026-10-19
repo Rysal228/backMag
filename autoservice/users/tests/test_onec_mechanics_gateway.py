@@ -9,7 +9,7 @@ from django.test import SimpleTestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from integrations.services.onec_users import OneCUserServiceError, OneCUsersClient
-from users.views import CustomUserViewSet
+from users.views import UserListView
 
 
 PHONE = "79999999999"
@@ -18,7 +18,7 @@ USER_ID = "44d93602-a058-4896-9f68-181bb34b4af3"
 
 def onec_profile():
     return {
-        "externalId": USER_ID, "phone": PHONE, "firstName": "User",
+        "onecId": USER_ID, "phone": PHONE, "firstName": "User",
         "lastName": "", "patronymic": "", "birthday": None,
         "isActive": True, "roles": ["user"],
     }
@@ -42,7 +42,7 @@ class OneCMechanicsViewTests(SimpleTestCase):
 
     @patch("users.views.OneCUsersClient")
     def test_reads_mechanics_from_onec_not_django(self, client_type):
-        client_type.return_value.get_user.return_value = onec_profile()
+        client_type.return_value.get_user_by_onec_id.return_value = onec_profile()
         client_type.return_value.list_mechanics.return_value = [mechanic()]
         request = self.factory.get(
             "/api/v1/users/",
@@ -51,7 +51,7 @@ class OneCMechanicsViewTests(SimpleTestCase):
         force_authenticate(request, user=self.user, token={"active_role": "user"})
         request.active_role = "user"
 
-        response = CustomUserViewSet.as_view({"get": "list"})(request)
+        response = UserListView.as_view()(request)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data[0]["firstName"], "Имя из 1С")
         client_type.return_value.get_user.assert_called_once_with(PHONE)
