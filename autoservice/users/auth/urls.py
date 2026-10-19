@@ -1,3 +1,4 @@
+from users.views import LogoutView
 from django.urls import include, path
 
 from .views import (
@@ -17,4 +18,5 @@ urlpatterns = [
     path('password/', PasswordView.as_view()),
     path('max/', include('users.auth.max.urls')),
     path('token/refresh/', RefreshTokenView.as_view()),
+    path('logout/', LogoutView.as_view()),
 ]
