@@ -187,6 +187,13 @@ class MaxAuthService:
                 raise OneCMaxError(
                     "onec_max_bad_response", "1С не выполнила привязку MAX."
                 )
+            if (
+                profile["externalId"] != str(external_id)
+                or profile["phone"] != phone
+            ):
+                raise OneCMaxError(
+                    "onec_max_identity_mismatch", "1С вернула другую учётную запись."
+                )
 
         if profile["messengerUserId"] != max_id:
             raise OneCMaxError(
@@ -199,6 +206,27 @@ class MaxAuthService:
         return MaxAuthService._create_tokens_or_selection(
             user=user, role=role, messenger_user_id=max_id,
         )
+
+    @staticmethod
+    def validate_current_binding(*, user, messenger_user_id, max_verified_phone):
+        """Fail closed on role/binding changes even for an existing MAX JWT."""
+        if (
+            not user.is_active
+            or user.messenger_user_id != messenger_user_id
+            or user.phone != max_verified_phone
+            or not user.onec_id
+        ):
+            raise AuthenticationFailed("MAX-сессия больше не действительна.")
+        profile = OneCMaxClient().resolve(messenger_user_id=messenger_user_id)
+        if (
+            profile is None
+            or profile["externalId"] != str(user.pk)
+            or profile["onecId"] != str(user.onec_id)
+            or profile["phone"] != user.phone
+            or profile["messengerUserId"] != messenger_user_id
+            or set(profile["roles"]) != set(get_user_roles(user))
+        ):
+            raise AuthenticationFailed("MAX-сессия больше не действительна.")
 
     @staticmethod
     def request_code(*, phone: str):
