@@ -148,3 +148,14 @@ class RefreshTokenSerializer(TokenRefreshSerializer):
             or user.phone != max_verified_phone
         ):
             raise MaxSessionInvalid()
+
+        from .max.services import MaxAuthService
+
+        try:
+            MaxAuthService.validate_current_binding(
+                user=user,
+                messenger_user_id=messenger_user_id,
+                max_verified_phone=max_verified_phone,
+            )
+        except AuthenticationFailed as exc:
+            raise MaxSessionInvalid() from exc
