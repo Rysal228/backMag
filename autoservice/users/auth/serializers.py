@@ -1,13 +1,10 @@
 import re
 
-from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
-
-User = get_user_model()
 
 
 class MaxSessionInvalid(AuthenticationFailed):
@@ -100,62 +97,47 @@ class PasswordSerializer(serializers.Serializer):
 class RefreshTokenSerializer(TokenRefreshSerializer):
     def validate(self, attrs):
         try:
-            refresh_token = RefreshToken(attrs['refresh'])
+            refresh_token = RefreshToken(attrs["refresh"])
         except TokenError:
             refresh_token = None
 
         if refresh_token is not None:
-            self._validate_active_role(refresh_token)
+            from integrations.services.onec_users import OneCUsersClient
+            from .identity import sync_native_user
 
-        if refresh_token is not None and refresh_token.get('auth_method') == 'max':
-            self._validate_max_binding(refresh_token)
+            user_id = refresh_token.get("user_id")
+            role = refresh_token.get("active_role")
+            if not user_id or not role:
+                raise AuthenticationFailed(
+                    "Сессия устарела. Войдите в систему заново."
+                )
+            profile = OneCUsersClient().get_user_by_onec_id(user_id)
+            user = sync_native_user(profile)
+            if not user.has_role(role):
+                raise AuthenticationFailed(
+                    "Активная роль больше не назначена пользователю."
+                )
+
+            if refresh_token.get("auth_method") == "max":
+                messenger = refresh_token.get("messenger_user_id", "")
+                phone = refresh_token.get("max_verified_phone", "")
+                if (
+                    not messenger
+                    or messenger != profile.get("messengerUserId")
+                    or phone != user.phone
+                ):
+                    raise MaxSessionInvalid()
+                from .max.services import MaxAuthService
+                try:
+                    MaxAuthService.validate_current_binding(
+                        user=user, messenger_user_id=messenger,
+                        max_verified_phone=phone,
+                    )
+                except AuthenticationFailed as exc:
+                    raise MaxSessionInvalid() from exc
 
         data = super().validate(attrs)
-
         return {
-            'accessToken': data['access'],
-            'refreshToken': data.get('refresh'),
+            "accessToken": data["access"],
+            "refreshToken": data.get("refresh"),
         }
-
-    @staticmethod
-    def _validate_active_role(refresh_token: RefreshToken) -> None:
-        user_id = refresh_token.get('user_id')
-        active_role = refresh_token.get('active_role')
-
-        if not user_id or not active_role:
-            raise AuthenticationFailed('Сессия устарела. Войдите в систему заново.')
-
-        user = User.objects.filter(pk=user_id, is_active=True).first()
-
-        if user is None or not user.has_role(active_role):
-            raise AuthenticationFailed('Активная роль больше не назначена пользователю.')
-
-    @staticmethod
-    def _validate_max_binding(refresh_token: RefreshToken) -> None:
-        user_id = refresh_token.get('user_id')
-        messenger_user_id = refresh_token.get('messenger_user_id')
-        max_verified_phone = refresh_token.get('max_verified_phone')
-
-        if not user_id or not messenger_user_id or not max_verified_phone:
-            raise MaxSessionInvalid()
-
-        user = User.objects.filter(pk=user_id).first()
-
-        if (
-            user is None
-            or not user.is_active
-            or user.messenger_user_id != messenger_user_id
-            or user.phone != max_verified_phone
-        ):
-            raise MaxSessionInvalid()
-
-        from .max.services import MaxAuthService
-
-        try:
-            MaxAuthService.validate_current_binding(
-                user=user,
-                messenger_user_id=messenger_user_id,
-                max_verified_phone=max_verified_phone,
-            )
-        except AuthenticationFailed as exc:
-            raise MaxSessionInvalid() from exc

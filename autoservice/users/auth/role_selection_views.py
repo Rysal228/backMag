@@ -1,15 +1,15 @@
-from django.contrib.auth import get_user_model
+"""Choose the current native-1C role after password or MAX authentication."""
 from rest_framework import status
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from integrations.services.onec_users import OneCUsersClient
+from .identity import sync_native_user
 from .role_selection import RoleSelectionService
 from .role_selection_serializers import RoleSelectionSerializer
 from .tokens import create_auth_tokens, create_max_auth_tokens
-
-User = get_user_model()
 
 
 class RoleSelectionView(APIView):
@@ -20,52 +20,39 @@ class RoleSelectionView(APIView):
         serializer.is_valid(raise_exception=True)
 
         payload = RoleSelectionService.load_token(
-            serializer.validated_data['selection_token'],
+            serializer.validated_data["selection_token"],
         )
+        profile = OneCUsersClient().get_user_by_onec_id(payload["user_id"])
+        user = sync_native_user(profile)
 
-        user = User.objects.filter(
-            pk=payload['user_id'],
-            is_active=True,
-        ).first()
-
-        if user is None:
-            raise AuthenticationFailed(
-                'Пользователь больше не может войти в систему.'
-            )
-
-        role = serializer.validated_data['role']
-
+        role = serializer.validated_data["role"]
         if not user.has_role(role):
             raise ValidationError({
-                'role': 'Выбранная роль недоступна для этого пользователя.',
+                "role": "Выбранная роль недоступна для этого пользователя.",
             })
 
-        if payload['auth_method'] == 'max':
+        if payload["auth_method"] == "max":
+            messenger = payload.get("messenger_user_id", "")
+            verified_phone = payload.get("max_verified_phone", "")
             if (
-                payload.get('messenger_user_id') != user.messenger_user_id
-                or payload.get('max_verified_phone') != user.phone
+                not messenger
+                or messenger != profile.get("messengerUserId")
+                or verified_phone != user.phone
             ):
-                raise AuthenticationFailed(
-                    'MAX-сессия больше не действительна.'
-                )
+                raise AuthenticationFailed("MAX-сессия больше не действительна.")
 
             from .max.services import MaxAuthService
             MaxAuthService.validate_current_binding(
-                user=user,
-                messenger_user_id=user.messenger_user_id,
-                max_verified_phone=user.phone,
+                user=user, messenger_user_id=messenger,
+                max_verified_phone=verified_phone,
             )
-
             tokens = create_max_auth_tokens(
-                user,
-                messenger_user_id=user.messenger_user_id,
-                max_verified_phone=user.phone,
-                active_role=role,
+                user, messenger_user_id=messenger,
+                max_verified_phone=verified_phone, active_role=role,
             )
+        elif payload["auth_method"] == "password":
+            tokens = create_auth_tokens(user, active_role=role)
         else:
-            tokens = create_auth_tokens(
-                user,
-                active_role=role,
-            )
+            raise AuthenticationFailed("Сессия выбора роли недействительна.")
 
         return Response(tokens, status=status.HTTP_200_OK)

@@ -86,15 +86,10 @@ class PasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Password status comes from the 1C register, not from Django's
-        # legacy password field. MAX-only/unlinked users have no 1C password.
-        if not request.user.onec_id:
-            return Response({'hasPassword': False})
-
+        # Password status comes exclusively from the 1C register.
         profile = OneCUsersClient().get_user(request.user.phone)
         if (
-            profile.get('externalId') != str(request.user.pk)
-            or profile.get('onecId') != str(request.user.onec_id)
+            profile.get('onecId') != str(request.user.pk)
             or type(profile.get('hasPassword')) is not bool
         ):
             raise OneCUserServiceError(

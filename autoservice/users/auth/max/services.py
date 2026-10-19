@@ -1,27 +1,21 @@
 """MAX authentication: Django verifies MAX signatures; 1C owns the account.
 
-Django temporarily maintains UUID/JWT/FK identity until cars/orders and JWT
-move to native 1C IDs. The frontend contract is unchanged.
+Django uses the native catalog UUID as the sole identity. The frontend contract is unchanged.
 """
 
 import secrets
 import uuid
 
-from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
 from rest_framework.exceptions import APIException, AuthenticationFailed
 
 from integrations.services.onec_max import OneCMaxClient, OneCMaxError
-from users.models import UserRoleAssignment
 from users.roles import get_user_roles
+from ..identity import native_id_from_profile, sync_native_user
 from ..role_selection import RoleSelectionService
 from ..services import PhoneNormalizer
 from ..tokens import create_max_auth_tokens
 from .client import MaxBotApiError, MaxBotClient
 from .validators import MaxContactValidator, MaxInitDataValidator
-
-
-User = get_user_model()
 
 
 class MaxAccountConflict(APIException):
@@ -65,73 +59,7 @@ class MaxAuthService:
 
     @staticmethod
     def _sync_identity(profile):
-        """Accept identity only after an authenticated 1C response.
-
-        Refuse mismatches; do not overwrite legacy UUID/phone/native binding.
-        Local roles are just a temporary mirror for existing JWT and FK checks.
-        """
-        identity_id = uuid.UUID(profile["externalId"])
-        phone = profile["phone"]
-        messenger_id = profile["messengerUserId"]
-        roles = set(profile["roles"])
-
-        try:
-            with transaction.atomic():
-                user = User.objects.select_for_update().filter(pk=identity_id).first()
-                by_phone = User.objects.select_for_update().filter(phone=phone).first()
-                by_max = User.objects.select_for_update().filter(
-                    messenger_user_id=messenger_id,
-                ).first()
-                if (
-                    (by_phone is not None and by_phone.pk != identity_id)
-                    or (by_max is not None and by_max.pk != identity_id)
-                ):
-                    raise MaxAccountConflict()
-                if user is None:
-                    user = User.objects.create_user(
-                        id=identity_id,
-                        phone=phone,
-                        password=None,
-                        messenger_user_id=messenger_id,
-                        first_name=profile["firstName"],
-                        last_name=profile["lastName"],
-                    )
-                elif (
-                    user.phone != phone
-                    or not user.is_active
-                    or (user.messenger_user_id
-                        and user.messenger_user_id != messenger_id)
-                ):
-                    raise MaxAccountConflict()
-
-                changes = []
-                if user.messenger_user_id != messenger_id:
-                    user.messenger_user_id = messenger_id
-                    changes.append("messenger_user_id")
-                # When a user is physically deleted from 1C, the new catalog
-                # element has another native UUID. The authoritative 1C
-                # profile is already bound to the same Django externalId,
-                # phone and signed MAX user ID, so restore the native link.
-                native_id = uuid.UUID(profile["onecId"])
-                if user.onec_id != native_id:
-                    if User.objects.select_for_update().filter(
-                        onec_id=native_id,
-                    ).exclude(pk=identity_id).exists():
-                        raise MaxAccountConflict()
-                    user.onec_id = native_id
-                    changes.append("onec_id")
-                if changes:
-                    user.save(update_fields=changes)
-
-                # Only the verified native account's roles are authoritative.
-                UserRoleAssignment.objects.filter(user=user).exclude(
-                    role__in=roles,
-                ).delete()
-                for assigned in roles:
-                    UserRoleAssignment.objects.get_or_create(user=user, role=assigned)
-                return user
-        except IntegrityError as exc:
-            raise MaxAccountConflict() from exc
+        return sync_native_user(profile)
 
     @staticmethod
     def authenticate(
@@ -162,44 +90,18 @@ class MaxAuthService:
         profile = client.resolve(messenger_user_id=max_id)
 
         if profile is None:
-            # Older MAX identities may exist only in Django. The saved binding
-            # is trusted here only because this MAX ID was just HMAC-verified.
-            historical = User.objects.filter(messenger_user_id=max_id).first()
-            if historical is not None and not historical.is_active:
-                raise AuthenticationFailed("User is inactive.")
-
             if phone is None:
-                if historical is None:
-                    return {"status": "contact_required"}
-                phone = historical.phone
-            elif historical is not None and historical.phone != phone:
-                raise MaxAccountConflict()
-
-            local = User.objects.filter(phone=phone).first()
-            if local is not None and (
-                not local.is_active
-                or (local.messenger_user_id and local.messenger_user_id != max_id)
-            ):
-                raise MaxAccountConflict()
-
-            external_id = local.pk if local is not None else uuid.uuid4()
+                return {"status": "contact_required"}
             profile = client.resolve(
                 messenger_user_id=max_id,
                 phone=phone,
-                external_id=external_id,
                 first_name=max_data.first_name,
                 last_name=max_data.last_name,
             )
-            if profile is None:
+            if profile is None or profile.get("phone") != phone:
                 raise OneCMaxError(
-                    "onec_max_bad_response", "1С не выполнила привязку MAX."
-                )
-            if (
-                profile["externalId"] != str(external_id)
-                or profile["phone"] != phone
-            ):
-                raise OneCMaxError(
-                    "onec_max_identity_mismatch", "1С вернула другую учётную запись."
+                    "onec_max_identity_mismatch",
+                    "1С не выполнила привязку MAX к указанному телефону.",
                 )
 
         if profile["messengerUserId"] != max_id:
@@ -216,19 +118,18 @@ class MaxAuthService:
 
     @staticmethod
     def validate_current_binding(*, user, messenger_user_id, max_verified_phone):
-        """Fail closed on role/binding changes even for an existing MAX JWT."""
+        """Re-check MAX session against the native 1C user and the signed binding."""
         if (
             not user.is_active
             or user.messenger_user_id != messenger_user_id
             or user.phone != max_verified_phone
-            or not user.onec_id
+            or not messenger_user_id
         ):
             raise AuthenticationFailed("MAX-сессия больше не действительна.")
         profile = OneCMaxClient().resolve(messenger_user_id=messenger_user_id)
         if (
             profile is None
-            or profile["externalId"] != str(user.pk)
-            or profile["onecId"] != str(user.onec_id)
+            or native_id_from_profile(profile) != str(user.pk)
             or profile["phone"] != user.phone
             or profile["messengerUserId"] != messenger_user_id
             or set(profile["roles"]) != set(get_user_roles(user))
