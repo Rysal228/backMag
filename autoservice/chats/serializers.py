@@ -3,6 +3,7 @@ from pathlib import Path
 from rest_framework import serializers
 
 from chats.models import ChatAttachment, ChatMessage, ChatRoom
+from users.onec_lookup import get_native_profile, native_display_name
 
 
 MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024
@@ -42,7 +43,7 @@ class ChatMessageSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_senderName(self, obj):
-        return obj.sender.get_full_name() or obj.sender.phone
+        return native_display_name(get_native_profile(obj.sender_id, self.context))
 
 
 class ChatRoomSerializer(serializers.ModelSerializer):
@@ -65,13 +66,13 @@ class ChatRoomSerializer(serializers.ModelSerializer):
     def get_mechanicName(self, obj):
         if not obj.mechanic_id:
             return None
-        return obj.mechanic.get_full_name() or obj.mechanic.phone
+        return native_display_name(get_native_profile(obj.mechanic_id, self.context))
 
     def get_lastMessage(self, obj):
-        message = obj.messages.select_related('sender').prefetch_related('attachments').order_by('-created_at').first()
+        message = obj.messages.prefetch_related('attachments').order_by('-created_at').first()
         if message is None:
             return None
-        return ChatMessageSerializer(message).data
+        return ChatMessageSerializer(message, context=self.context).data
 
 
 class ChatAttachmentUploadField(serializers.FileField):

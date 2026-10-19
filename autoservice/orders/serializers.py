@@ -377,7 +377,7 @@ class OrderSerializer(serializers.ModelSerializer):
         if works is not None:
             self._replace_order_works(order, works)
         if mechanics is not None:
-            order.mechanics.set(mechanics)
+            self._save_mechanics(order, mechanics)
         if appointment_changed:
             AppointmentAvailabilityService.sync_order_busy_slot(order)
         return order

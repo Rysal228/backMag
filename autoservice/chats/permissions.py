@@ -22,7 +22,7 @@ def can_access_order_chats(order, request):
         return True
 
     if role == UserRole.MECHANIC:
-        return order.mechanics.filter(pk=user.pk).exists()
+        return order.mechanic_links.filter(mechanic_id=user.pk).exists()
 
     return False
 
@@ -40,7 +40,7 @@ def can_access_room_for(room: ChatRoom, user, role) -> bool:
             or (
                 role == UserRole.MECHANIC
                 and room.mechanic_id == user.id
-                and room.order.mechanics.filter(pk=user.pk).exists()
+                and room.order.mechanic_links.filter(mechanic_id=user.pk).exists()
             )
         )
 

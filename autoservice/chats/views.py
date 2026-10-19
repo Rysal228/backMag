@@ -21,7 +21,7 @@ class OrderChatRoomsView(APIView):
 
     def get(self, request, order_id):
         order = get_object_or_404(
-            Order.objects.prefetch_related('mechanics'),
+            Order.objects.prefetch_related('mechanic_links'),
             pk=order_id,
         )
         if not can_access_order_chats(order, request):
@@ -34,23 +34,23 @@ class OrderChatRoomsView(APIView):
             room, _ = ChatRoom.objects.get_or_create(
                 order=order,
                 type=ChatRoom.Type.CUSTOMER_MANAGER,
-                defaults={'mechanic': None},
+                defaults={'mechanic_id': None},
             )
             rooms.append(room)
 
         if role == UserRole.ADMIN:
-            for mechanic in order.mechanics.all():
+            for mechanic_id in order.mechanic_ids:
                 room, _ = ChatRoom.objects.get_or_create(
                     order=order,
                     type=ChatRoom.Type.MANAGER_MECHANIC,
-                    mechanic=mechanic,
+                    mechanic_id=mechanic_id,
                 )
                 rooms.append(room)
         elif role == UserRole.MECHANIC:
             room, _ = ChatRoom.objects.get_or_create(
                 order=order,
                 type=ChatRoom.Type.MANAGER_MECHANIC,
-                mechanic=request.user,
+                mechanic_id=request.user.id,
             )
             rooms.append(room)
 
@@ -62,13 +62,13 @@ class ChatMessagesView(APIView):
 
     def get(self, request, room_id):
         room = get_object_or_404(
-            ChatRoom.objects.select_related('order', 'mechanic'),
+            ChatRoom.objects.select_related('order'),
             pk=room_id,
         )
         if not can_access_room(room, request):
             raise PermissionDenied('Нет доступа к этому чату.')
 
-        queryset = room.messages.select_related('sender').prefetch_related('attachments').order_by('-created_at', '-id')
+        queryset = room.messages.prefetch_related('attachments').order_by('-created_at', '-id')
         before = request.query_params.get('before')
         if before:
             before_value = serializers.DateTimeField().run_validation(before)
@@ -100,7 +100,7 @@ class ChatMessagesView(APIView):
         validated = serializer.validated_data
         message = ChatMessage.objects.create(
             room=room,
-            sender=request.user,
+            sender_id=request.user.id,
             text=validated.get('text', ''),
         )
 
@@ -130,7 +130,7 @@ class ChatAttachmentDownloadView(APIView):
 
     def get(self, request, attachment_id):
         attachment = get_object_or_404(
-            ChatAttachment.objects.select_related('message__room__order', 'message__room__mechanic'),
+            ChatAttachment.objects.select_related('message__room__order'),
             pk=attachment_id,
         )
         if not can_access_room(attachment.message.room, request):

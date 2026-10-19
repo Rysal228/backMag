@@ -182,7 +182,7 @@ class CarViewSet(viewsets.ModelViewSet):
         if request.active_role != UserRole.USER:
             raise PermissionDenied('Только пользователь может восстанавливать автомобиль.')
 
-        car = get_object_or_404(Car, pk=pk, owner=request.user)
+        car = get_object_or_404(Car, pk=pk, owner_id=request.user.id)
 
         if not car.is_archived:
             raise ValidationError({'detail': 'Автомобиль уже активен.'})

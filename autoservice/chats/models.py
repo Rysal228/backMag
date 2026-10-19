@@ -33,8 +33,8 @@ class ChatRoom(models.Model):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    Q(type='customer_manager', mechanic__isnull=True)
-                    | Q(type='manager_mechanic', mechanic__isnull=False)
+                    Q(type='customer_manager', mechanic_id__isnull=True)
+                    | Q(type='manager_mechanic', mechanic_id__isnull=False)
                 ),
                 name='chat_room_type_mechanic_consistency',
             ),

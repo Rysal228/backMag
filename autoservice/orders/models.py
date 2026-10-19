@@ -394,6 +394,10 @@ class Order(models.Model):
     refusal_reason = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def mechanic_ids(self):
+        return [assignment.mechanic_id for assignment in self.mechanic_links.all()]
+
     def __str__(self):
         return f'Заказ №{self.order_number}'
 
