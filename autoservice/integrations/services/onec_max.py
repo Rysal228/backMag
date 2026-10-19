@@ -2,8 +2,9 @@
 
 Only Django validates MAX signatures and sends bot messages. 1C is authoritative
 for MAX identity, account binding and one-time code state.
-HTTPS + dedicated Basic credentials are mandatory: never send verified identity
-assertions or OTPs to an unauthenticated/plaintext endpoint.
+The existing private Docker-to-Apache 1C hop uses HTTP. Allow only its exact
+known internal URL for HTTP; custom endpoints must use HTTPS. Basic service
+credentials are still required (HTTP Basic is not encrypted over that hop).
 """
 
 import os
@@ -25,15 +26,32 @@ class OneCMaxError(APIException):
         super().__init__(detail=detail, code=code)
 
 
+# The same known internal Apache endpoint already used by Django -> 1C.
+# Do not generalize this HTTP exemption to custom hosts or public addresses.
+INTERNAL_MAX_BASE_URL = "http://host.docker.internal:8081/ServiceCar/hs/auth"
+
+
 class OneCMaxClient:
     def __init__(self):
-        self.base_url = os.environ.get("ONEC_MAX_BASE_URL", "").strip().rstrip("/")
-        self.username = os.environ.get("ONEC_MAX_API_USER", "").strip()
-        self.password = os.environ.get("ONEC_MAX_API_PASSWORD", "")
+        self.base_url = os.environ.get(
+            "ONEC_MAX_BASE_URL", INTERNAL_MAX_BASE_URL,
+        ).strip().rstrip("/")
+        # ServiceCarAuth is an existing dedicated technical-user HTTP service.
+        # Reuse its credentials if MAX-specific ones are not configured.
+        max_user = os.environ.get("ONEC_MAX_API_USER")
+        max_password = os.environ.get("ONEC_MAX_API_PASSWORD")
+        if max_user is not None or max_password is not None:
+            self.username = (max_user or "").strip()
+            self.password = max_password or ""
+        else:
+            self.username = os.environ.get("ONEC_AUTH_API_USER", "").strip()
+            self.password = os.environ.get("ONEC_AUTH_API_PASSWORD", "")
+
         parsed = urlsplit(self.base_url)
+        known_internal_http = self.base_url == INTERNAL_MAX_BASE_URL
+        valid_https = parsed.scheme == "https" and bool(parsed.hostname)
         if (
-            parsed.scheme != "https"
-            or not parsed.hostname
+            not (known_internal_http or valid_https)
             or parsed.username is not None
             or parsed.password is not None
             or parsed.query or parsed.fragment
@@ -42,7 +60,7 @@ class OneCMaxClient:
         ):
             raise OneCMaxError(
                 "onec_max_not_configured",
-                "Не настроен защищённый MAX-сервис 1С.",
+                "Не настроен доступ к служебному MAX-сервису 1С.",
                 status_code=503,
             )
 
