@@ -28,7 +28,7 @@ class OneCMaxError(APIException):
 
 # The same known internal Apache endpoint already used by Django -> 1C.
 # Do not generalize this HTTP exemption to custom hosts or public addresses.
-INTERNAL_MAX_BASE_URL = "http://host.docker.internal:8081/ServiceCar/hs/auth"
+INTERNAL_MAX_BASE_URL = "http://host.docker.internal:8081/ServiceCar/hs/api"
 
 
 class OneCMaxClient:
@@ -36,16 +36,20 @@ class OneCMaxClient:
         self.base_url = os.environ.get(
             "ONEC_MAX_BASE_URL", INTERNAL_MAX_BASE_URL,
         ).strip().rstrip("/")
-        # ServiceCarAuth is an existing dedicated technical-user HTTP service.
-        # Reuse its credentials if MAX-specific ones are not configured.
+        # The MAX methods run in the existing ServiceCarAPI HTTP service.
+        # Reuse existing technical credentials if MAX-specific ones are absent.
         max_user = os.environ.get("ONEC_MAX_API_USER")
         max_password = os.environ.get("ONEC_MAX_API_PASSWORD")
         if max_user is not None or max_password is not None:
             self.username = (max_user or "").strip()
             self.password = max_password or ""
         else:
-            self.username = os.environ.get("ONEC_AUTH_API_USER", "").strip()
-            self.password = os.environ.get("ONEC_AUTH_API_PASSWORD", "")
+            self.username = os.environ.get(
+                "ONEC_API_USER", os.environ.get("ONEC_AUTH_API_USER", "")
+            ).strip()
+            self.password = os.environ.get(
+                "ONEC_API_PASSWORD", os.environ.get("ONEC_AUTH_API_PASSWORD", "")
+            )
 
         parsed = urlsplit(self.base_url)
         known_internal_http = self.base_url == INTERNAL_MAX_BASE_URL
@@ -55,7 +59,7 @@ class OneCMaxClient:
             or parsed.username is not None
             or parsed.password is not None
             or parsed.query or parsed.fragment
-            or not self.base_url.endswith("/hs/auth")
+            or not self.base_url.endswith("/hs/api")
             or not self.username or not self.password
         ):
             raise OneCMaxError(
