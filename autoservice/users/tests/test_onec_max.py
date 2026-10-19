@@ -52,6 +52,7 @@ class MaxTransferTests(TestCase):
                        user_id=int(MAX_ID), first_name="Иван",
                        last_name="Иванов",
                    )), \
+             patch("users.auth.max.services.uuid.uuid4", return_value=UUID(EXTERNAL_ID)), \
              patch("users.auth.max.services.MaxContactValidator.validate") as contact, \
              patch("users.auth.max.services.OneCMaxClient") as gateway, \
              patch("users.auth.max.services.create_max_auth_tokens",
