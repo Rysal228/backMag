@@ -103,7 +103,6 @@ class OneCMaxClient:
             )
         try:
             onec_id = str(UUID(str(data["onecId"])))
-            external_id = str(UUID(str(data["externalId"])))
             phone = data["phone"]
             messenger_user_id = data["messengerUserId"]
             roles = data["roles"]
@@ -136,7 +135,6 @@ class OneCMaxClient:
             )
         return {
             "onecId": onec_id,
-            "externalId": external_id,
             "phone": phone,
             "messengerUserId": messenger_user_id,
             "roles": roles,
@@ -145,15 +143,12 @@ class OneCMaxClient:
             "lastName": last_name,
         }
 
-    def resolve(self, *, messenger_user_id, phone=None, external_id=None,
+    def resolve(self, *, messenger_user_id, phone=None,
                 first_name="", last_name=""):
         payload = {"messengerUserId": str(messenger_user_id)}
         if phone is not None:
-            if external_id is None:
-                raise ValueError("external_id is required with phone")
             payload.update({
                 "phone": str(phone),
-                "externalId": str(external_id),
                 "firstName": first_name,
                 "lastName": last_name,
             })

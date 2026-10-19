@@ -22,11 +22,9 @@ class OneCProfileView(APIView):
 
     @staticmethod
     def _check_identity(request, user):
-        # Temporary bridge: JWT still resolves to CustomUser until authentication
-        # and the foreign keys in cars/orders are migrated off that model.
-        # 1C is ALWAYS the source of profile fields and assigned roles.
+        # The native catalog UUID is the only application-user identity.
         if (
-            user.get("externalId") != str(request.user.pk)
+            user.get("onecId") != str(request.user.pk)
             or user.get("phone") != request.user.phone.strip().removeprefix("+")
         ):
             raise OneCUserServiceError(
@@ -52,7 +50,7 @@ class OneCProfileView(APIView):
     def _to_frontend(request, user):
         # Keep the existing Angular profile response contract.
         return {
-            "id": user["externalId"],
+            "id": user["onecId"],
             "phone": user["phone"],
             "firstName": user.get("firstName", ""),
             "lastName": user.get("lastName", ""),

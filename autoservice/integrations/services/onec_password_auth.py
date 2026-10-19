@@ -242,11 +242,11 @@ class OneCPasswordAuthClient:
             )
         return True
 
-    def setup_initial_password(self, *, phone, onec_id, external_id, new_password):
+    def setup_initial_password(self, *, phone, onec_id, new_password):
         """Set a password only on an already-linked, passwordless 1C account.
 
         Caller must validate the signed MAX identity. The 1C API verifies
-        the native/user bridge again and refuses replacing an existing hash.
+        the native catalog UUID again and refuses replacing an existing hash.
         """
         phone = str(phone).strip().removeprefix("+")
         if not (
@@ -259,7 +259,6 @@ class OneCPasswordAuthClient:
             )
         try:
             native_id = str(UUID(str(onec_id)))
-            local_id = str(UUID(str(external_id)))
         except (ValueError, TypeError, AttributeError) as exc:
             raise OneCUserServiceError(
                 "onec_auth_invalid_identity", "Неверная привязка аккаунта.",
@@ -282,7 +281,6 @@ class OneCPasswordAuthClient:
                 json={
                     "phone": phone,
                     "onecId": native_id,
-                    "externalId": local_id,
                     "newPassword": new_password,
                 },
                 auth=None if self.internal_http else (self.username, self.password),

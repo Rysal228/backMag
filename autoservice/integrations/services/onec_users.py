@@ -23,6 +23,14 @@ class OneCUserServiceError(APIException):
         super().__init__(detail=message, code=code)
 
 
+def _is_uuid(value):
+    try:
+        UUID(str(value))
+        return True
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
 class OneCUsersClient:
     """Server-to-server API, using the existing known internal ServiceCarAPI."""
 
@@ -123,14 +131,14 @@ class OneCUsersClient:
             raise OneCUserServiceError(
                 "onec_invalid_response", "1С вернула некорректный профиль."
             )
-        if not isinstance(user.get("externalId"), str) or not isinstance(user.get("phone"), str):
+        if not isinstance(user.get("onecId"), str) or not isinstance(user.get("phone"), str):
             raise OneCUserServiceError(
                 "onec_invalid_response", "1С не вернула идентификатор пользователя."
             )
         return user
 
     def create_user_with_password(
-        self, *, phone, external_id, password, first_name, last_name,
+        self, *, phone, password, first_name, last_name,
         patronymic="", birthday=None, messenger_user_id="", roles=None,
     ):
         """Create the 1C catalog element, roles and password in one 1C transaction.
@@ -147,7 +155,6 @@ class OneCUsersClient:
                 "onec_invalid_identity", "Некорректный телефон регистрации.",
                 status_code=400,
             )
-        native_django_id = str(UUID(str(external_id)))
         assigned_roles = sorted(set(roles if roles is not None else ["user"]))
         if not assigned_roles or not set(assigned_roles).issubset(
             {"user", "mechanic", "admin"}
@@ -158,7 +165,6 @@ class OneCUsersClient:
             )
         payload = {
             "phone": normalized,
-            "externalId": native_django_id,
             "password": password,
             "firstName": first_name,
             "lastName": last_name,
@@ -181,7 +187,6 @@ class OneCUsersClient:
             ) from exc
         if (
             profile.get("phone") != normalized
-            or profile.get("externalId") != native_django_id
             or profile.get("isActive") is not True
             or sorted(profile.get("roles", [])) != assigned_roles
             or profile.get("hasPassword") is not True
@@ -271,6 +276,7 @@ class OneCUsersClient:
                     or any(not isinstance(user.get(field), str)
                            for field in ("id", "phone", "firstName",
                                          "lastName", "patronymic"))
+                    or not _is_uuid(user["id"])
                     or user.get("birthday") is not None
                     and not isinstance(user.get("birthday"), str)):
                 raise OneCUserServiceError(
