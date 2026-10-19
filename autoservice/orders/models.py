@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
-from users.models import CustomUser, UserRole
+from users.models import UserRole
 from cars.models import Car
 
 
@@ -376,13 +376,10 @@ class Order(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     order_number = models.CharField(max_length=50, unique=True)
-    customer = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='orders')
-    mechanics = models.ManyToManyField(
-        CustomUser,
-        related_name='assigned_orders',
-        blank=True,
-        verbose_name='Специалисты',
-    )
+    customer_id = models.UUIDField(db_index=True)
+    # Immutable historical snapshot for search and display without a local user model.
+    customer_phone_snapshot = models.CharField(max_length=20, blank=True)
+    customer_name_snapshot = models.CharField(max_length=450, blank=True)
     car = models.ForeignKey(Car, on_delete=models.PROTECT, related_name='orders')
     car_brand_snapshot = models.CharField(max_length=100)
     car_model_snapshot = models.CharField(max_length=100)
@@ -403,3 +400,24 @@ class Order(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class OrderMechanic(models.Model):
+    """Specialist assignment by native 1C UUID rather than Django User FK."""
+
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE, related_name='mechanic_links',
+    )
+    mechanic_id = models.UUIDField(db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=('order', 'mechanic_id'),
+                name='unique_order_native_mechanic',
+            ),
+        ]
+        indexes = [models.Index(fields=('mechanic_id', 'order'))]
+
+    def __str__(self):
+        return f'{self.order_id}: {self.mechanic_id}'
