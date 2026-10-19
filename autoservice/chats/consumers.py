@@ -1,11 +1,16 @@
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.utils import timezone
+from types import SimpleNamespace
+from uuid import UUID
+
 from rest_framework_simplejwt.authentication import JWTAuthentication
+
+from integrations.services.onec_users import OneCUsersClient
+from users.auth.identity import sync_native_user
 
 from chats.models import ChatMessage, ChatRoom
 from chats.permissions import can_access_room_for
-from users.models import CustomUser
 
 
 class OrderChatConsumer(AsyncJsonWebsocketConsumer):
@@ -82,7 +87,7 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
             await self.close(code=4401)
             return
 
-        user, role, expires_at = result
+        user, role, expires_at, method, messenger, max_phone = result
         room = await self._get_accessible_room(user.pk, role)
         if room is None:
             await self._send_error('chat_access_denied', 'Нет доступа к этому чату.')
@@ -92,6 +97,9 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
         self.user = user
         self.active_role = role
         self.token_expires_at = expires_at
+        self.auth_method = method
+        self.messenger_id = messenger
+        self.max_verified_phone = max_phone
         self.room = room
         self.group_name = f'chat_{room.pk.hex}'
         await self.channel_layer.group_add(self.group_name, self.channel_name)
@@ -104,44 +112,64 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
     def _authenticate_token(self, raw_token):
         try:
             token = JWTAuthentication().get_validated_token(raw_token)
-            user = JWTAuthentication().get_user(token)
+            native_id = UUID(str(token.get('user_id', '')))
+            profile = OneCUsersClient().get_user_by_onec_id(native_id)
+            role = token.get('active_role')
+            if not role or role not in profile.get('roles', []):
+                return None
+            method = token.get('auth_method')
+            messenger = token.get('messenger_user_id', '')
+            max_phone = token.get('max_verified_phone', '')
+            if method == 'max' and (
+                not messenger or messenger != profile.get('messengerUserId')
+                or max_phone != profile.get('phone')
+            ):
+                return None
+            if method not in ('max', 'password'):
+                return None
+            user = sync_native_user(profile)
+            return user, role, int(token['exp']), method, messenger, max_phone
         except Exception:
+            # Any 1C or token failure denies access, never falls back to local
+            # stale role assignments.
             return None
-
-        role = token.get('active_role')
-        if not role or not user.has_role(role):
-            return None
-        return user, role, int(token['exp'])
 
     @database_sync_to_async
     def _get_accessible_room(self, user_id, role):
         room = (
             ChatRoom.objects
-            .select_related('order', 'mechanic')
+            .select_related('order')
             .filter(pk=self.scope['url_route']['kwargs']['room_id'])
             .first()
         )
-        user = CustomUser.objects.filter(pk=user_id).first()
-        if room is None or user is None or not can_access_room_for(room, user, role):
+        identity = SimpleNamespace(id=user_id, pk=user_id)
+        if room is None or not can_access_room_for(room, identity, role):
             return None
         return room
 
     @database_sync_to_async
     def _still_authorized(self):
-        user = CustomUser.objects.filter(pk=self.user.pk).first()
+        try:
+            profile = OneCUsersClient().get_user_by_onec_id(self.user.pk)
+        except Exception:
+            return False
+        if (
+            profile.get('isActive') is not True
+            or self.active_role not in profile.get('roles', [])
+        ):
+            return False
+        if self.auth_method == 'max' and (
+            self.messenger_id != profile.get('messengerUserId')
+            or self.max_verified_phone != profile.get('phone')
+        ):
+            return False
         room = (
             ChatRoom.objects
-            .select_related('order', 'mechanic')
+            .select_related('order')
             .filter(pk=self.room.pk)
             .first()
         )
-        return bool(
-            user
-            and user.is_active
-            and room
-            and user.has_role(self.active_role)
-            and can_access_room_for(room, user, self.active_role)
-        )
+        return bool(room and can_access_room_for(room, self.user, self.active_role))
 
     @database_sync_to_async
     def _create_message(self, text):

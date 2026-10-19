@@ -4,6 +4,7 @@ from django.db import transaction
 from rest_framework import serializers
 
 from cars.models import Car, CarBrand, CarModel, CarOwnership
+from users.onec_lookup import get_native_profile, native_display_name
 
 
 class CarBrandSerializer(serializers.ModelSerializer):
@@ -31,10 +32,7 @@ class CarSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     ownerName = serializers.SerializerMethodField()
-    ownerPhone = serializers.CharField(
-        source='owner.phone',
-        read_only=True,
-    )
+    ownerPhone = serializers.SerializerMethodField()
     modelName = serializers.CharField(
         source='model.name',
         read_only=True,
@@ -76,7 +74,10 @@ class CarSerializer(serializers.ModelSerializer):
         ]
 
     def get_ownerName(self, obj):
-        return obj.owner.get_full_name() or obj.owner.phone
+        return native_display_name(get_native_profile(obj.owner_id, self.context))
+
+    def get_ownerPhone(self, obj):
+        return get_native_profile(obj.owner_id, self.context)["phone"]
 
     def get_hasOrders(self, obj):
         return obj.orders.exists()
@@ -137,7 +138,7 @@ class CarSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        owner = self.context['request'].user
-        car = Car.objects.create(owner=owner, **validated_data)
-        CarOwnership.objects.create(car=car, owner=owner)
+        owner_id = self.context['request'].user.id
+        car = Car.objects.create(owner_id=owner_id, **validated_data)
+        CarOwnership.objects.create(car=car, owner_id=owner_id)
         return car

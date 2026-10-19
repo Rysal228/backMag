@@ -23,7 +23,7 @@ class CarAdmin(admin.ModelAdmin):
         'brand',
         'model',
         'year',
-        'owner',
+        'owner_id',
         'status',
     )
 
