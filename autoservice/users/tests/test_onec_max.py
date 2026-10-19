@@ -90,6 +90,46 @@ class MaxTransferTests(TestCase):
         user.refresh_from_db()
         self.assertEqual(str(user.onec_id), ONEC_ID)
 
+    def test_recreated_onec_account_updates_stale_native_id_after_verified_max(self):
+        old_native_id = UUID("a9d95012-e69d-440e-8725-a3db7d8f8899")
+        user = CustomUser.objects.create_user(
+            id=UUID(EXTERNAL_ID), phone=PHONE, password=None,
+            onec_id=old_native_id, messenger_user_id=MAX_ID,
+        )
+        with patch("users.auth.max.services.MaxInitDataValidator.validate",
+                   return_value=SimpleNamespace(user_id=int(MAX_ID))), \
+             patch("users.auth.max.services.OneCMaxClient") as gateway, \
+             patch("users.auth.max.services.create_max_auth_tokens",
+                   return_value={"accessToken": "a", "refreshToken": "r"}):
+            # This new UUID is returned by the authoritative 1C MAX endpoint.
+            gateway.return_value.resolve.return_value = profile()
+            result = MaxAuthService.authenticate(init_data="signed")
+        self.assertIn("accessToken", result)
+        user.refresh_from_db()
+        self.assertEqual(user.pk, UUID(EXTERNAL_ID))
+        self.assertEqual(str(user.onec_id), ONEC_ID)
+        self.assertEqual(user.messenger_user_id, MAX_ID)
+        self.assertFalse(user.has_usable_password())
+
+    def test_recreated_onec_id_cannot_take_identity_owned_by_another_user(self):
+        old_native_id = UUID("a9d95012-e69d-440e-8725-a3db7d8f8899")
+        CustomUser.objects.create_user(
+            id=UUID(EXTERNAL_ID), phone=PHONE, password=None,
+            onec_id=old_native_id, messenger_user_id=MAX_ID,
+        )
+        CustomUser.objects.create_user(
+            phone="79135552626", password=None, onec_id=UUID(ONEC_ID),
+        )
+        with self.assertRaises(MaxAccountConflict), \
+             patch("users.auth.max.services.MaxInitDataValidator.validate",
+                   return_value=SimpleNamespace(user_id=int(MAX_ID))), \
+             patch("users.auth.max.services.OneCMaxClient") as gateway:
+            gateway.return_value.resolve.return_value = profile()
+            MaxAuthService.authenticate(init_data="signed")
+        self.assertEqual(
+            CustomUser.objects.get(pk=UUID(EXTERNAL_ID)).onec_id, old_native_id
+        )
+
     def test_different_local_user_with_same_phone_blocks_token(self):
         CustomUser.objects.create_user(phone=PHONE, password=None)
         with self.assertRaises(MaxAccountConflict), \
