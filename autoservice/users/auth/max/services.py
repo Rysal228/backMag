@@ -101,8 +101,6 @@ class MaxAuthService:
                     or not user.is_active
                     or (user.messenger_user_id
                         and user.messenger_user_id != messenger_id)
-                    or (user.onec_id
-                        and str(user.onec_id) != profile["onecId"])
                 ):
                     raise MaxAccountConflict()
 
@@ -110,8 +108,17 @@ class MaxAuthService:
                 if user.messenger_user_id != messenger_id:
                     user.messenger_user_id = messenger_id
                     changes.append("messenger_user_id")
-                if not user.onec_id:
-                    user.onec_id = uuid.UUID(profile["onecId"])
+                # A deleted 1C catalog item gets a new native UUID if the same
+                # MAX account logs in again. 1C has already verified the
+                # MAX ID, phone and immutable Django externalId. Restore the
+                # native link instead of stranding the existing Django user.
+                native_id = uuid.UUID(profile["onecId"])
+                if user.onec_id != native_id:
+                    if User.objects.select_for_update().filter(
+                        onec_id=native_id,
+                    ).exclude(pk=identity_id).exists():
+                        raise MaxAccountConflict()
+                    user.onec_id = native_id
                     changes.append("onec_id")
                 if changes:
                     user.save(update_fields=changes)
