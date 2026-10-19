@@ -128,6 +128,7 @@ class OneCMaxClient:
             or not messenger_user_id.isdigit() or not 1 <= len(messenger_user_id) <= 20
             or type(active) is not bool
             or not isinstance(roles, list) or not roles
+            or any(not isinstance(item, str) for item in roles)
             or len(roles) != len(set(roles))
             or not set(roles) <= {"user", "mechanic", "admin"}
             or not isinstance(first_name, str) or not isinstance(last_name, str)
