@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from integrations.services.onec_users import OneCUsersClient
-from .identity import sync_native_user
+from .identity import user_from_profile
 from .role_selection import RoleSelectionService
 from .role_selection_serializers import RoleSelectionSerializer
 from .tokens import create_auth_tokens, create_max_auth_tokens
@@ -23,7 +23,7 @@ class RoleSelectionView(APIView):
             serializer.validated_data["selection_token"],
         )
         profile = OneCUsersClient().get_user_by_onec_id(payload["user_id"])
-        user = sync_native_user(profile)
+        user = user_from_profile(profile)
 
         role = serializer.validated_data["role"]
         if not user.has_role(role):

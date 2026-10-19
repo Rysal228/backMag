@@ -10,7 +10,7 @@ from rest_framework.exceptions import APIException, AuthenticationFailed
 
 from integrations.services.onec_max import OneCMaxClient, OneCMaxError
 from users.roles import get_user_roles
-from ..identity import native_id_from_profile, sync_native_user
+from ..identity import native_id_from_profile, user_from_profile
 from ..role_selection import RoleSelectionService
 from ..services import PhoneNormalizer
 from ..tokens import create_max_auth_tokens
@@ -59,7 +59,7 @@ class MaxAuthService:
 
     @staticmethod
     def _sync_identity(profile):
-        return sync_native_user(profile)
+        return user_from_profile(profile)
 
     @staticmethod
     def authenticate(

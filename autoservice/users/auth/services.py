@@ -5,7 +5,7 @@ from integrations.services.onec_password_auth import OneCPasswordAuthClient
 from integrations.services.onec_users import OneCUsersClient, OneCUserServiceError
 from users.roles import get_user_roles, resolve_active_role
 
-from .identity import native_id_from_profile, sync_native_user
+from .identity import native_id_from_profile, user_from_profile
 from .role_selection import RoleSelectionService
 from .tokens import create_auth_tokens, create_max_auth_tokens
 
@@ -44,7 +44,7 @@ class AuthService:
             raise OneCUserServiceError(
                 "onec_identity_mismatch", "Сведения авторизации 1С не совпадают.",
             )
-        user = sync_native_user(profile)
+        user = user_from_profile(profile)
         return AuthService._tokens_or_role_selection(user=user, role=role)
 
     @staticmethod
@@ -68,13 +68,13 @@ class AuthService:
             raise OneCUserServiceError(
                 "onec_identity_mismatch", "1С вернула другую учётную запись.",
             )
-        user = sync_native_user(profile)
+        user = user_from_profile(profile)
         return AuthService._tokens_or_role_selection(user=user)
 
     @staticmethod
     def switch_role(*, user, role: str, token=None) -> dict[str, str]:
         profile = OneCUsersClient().get_user_by_onec_id(user.pk)
-        current = sync_native_user(profile)
+        current = user_from_profile(profile)
         selected = resolve_active_role(current, role)
         if token is not None and token.get("auth_method") == "max":
             from .max.services import MaxAuthService
