@@ -21,6 +21,7 @@ class OneCMaxError(APIException):
 
     def __init__(self, code, detail, *, status_code=502):
         self.status_code = status_code
+        self.default_code = code
         super().__init__(detail=detail, code=code)
 
 
