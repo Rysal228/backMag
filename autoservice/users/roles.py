@@ -14,25 +14,20 @@ class RoleSelectionRequired(ValidationError):
 
 
 def get_user_roles(user) -> list[str]:
-    return list(
-        user.role_assignments.values_list('role', flat=True)
-    )
+    """Roles are taken from the verified 1C profile, never from Django ORM."""
+    return user.get_roles()
 
 
 def resolve_active_role(user, role: str | None = None) -> str:
     roles = get_user_roles(user)
-
     if not roles:
-        raise ValidationError({
-            'role': 'У пользователя не назначена ни одна роль.',
-        })
+        raise ValidationError({'role': 'У пользователя не назначена ни одна роль.'})
 
     if role is not None:
         if role not in roles:
             raise ValidationError({
                 'role': 'Выбранная роль недоступна для этого пользователя.',
             })
-
         return role
 
     if len(roles) == 1:

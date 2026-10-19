@@ -1,110 +1,104 @@
-"""Temporary ORM adapter keyed exclusively by the native 1C catalog UUID.
-
-This bridge exists only while car/order/chat ForeignKeys target CustomUser.
-It never allocates a second application-user identifier.
-"""
+"""Application-user identity resolved from 1C, with no Django ORM record."""
+from dataclasses import dataclass
 from uuid import UUID
 
-from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
 from rest_framework.exceptions import AuthenticationFailed
 
 from integrations.services.onec_users import OneCUserServiceError
-from users.models import UserRoleAssignment
-
-User = get_user_model()
-VALID_ROLES = frozenset({"user", "mechanic", "admin"})
 
 
-def native_id_from_profile(profile):
+VALID_ROLES = frozenset(("user", "mechanic", "admin"))
+
+
+def native_id_from_profile(profile) -> str:
     try:
-        value = str(UUID(str(profile["onecId"])))
+        return str(UUID(str(profile["onecId"])))
     except (KeyError, ValueError, TypeError, AttributeError) as exc:
         raise OneCUserServiceError(
             "onec_invalid_response", "1С вернула некорректный UUID пользователя."
         ) from exc
-    return value
 
 
-def sync_native_user(profile):
-    """Mirror an authenticated 1C profile using pk == its native onecId."""
+@dataclass(frozen=True)
+class OneCUser:
+    """DRF request.user for the site; not a Django database model."""
+
+    id: UUID
+    phone: str
+    roles: tuple[str, ...]
+    messenger_user_id: str = ""
+    first_name: str = ""
+    last_name: str = ""
+    patronymic: str = ""
+    birthday: str | None = None
+
+    @property
+    def pk(self) -> UUID:
+        return self.id
+
+    @property
+    def is_authenticated(self) -> bool:
+        return True
+
+    @property
+    def is_anonymous(self) -> bool:
+        return False
+
+    @property
+    def is_active(self) -> bool:
+        return True
+
+    def get_roles(self) -> list[str]:
+        return list(self.roles)
+
+    def has_role(self, role: str) -> bool:
+        return role in self.roles
+
+    def get_full_name(self) -> str:
+        return " ".join(
+            part for part in (self.last_name, self.first_name, self.patronymic)
+            if part
+        )
+
+    def __str__(self) -> str:
+        return self.get_full_name() or self.phone
+
+
+def user_from_profile(profile) -> OneCUser:
+    """Only a currently active, well-formed 1C account is authenticated."""
+    if not isinstance(profile, dict):
+        raise OneCUserServiceError(
+            "onec_invalid_response", "1С вернула некорректный профиль."
+        )
     native_id = native_id_from_profile(profile)
+    if profile.get("isActive") is not True:
+        raise AuthenticationFailed("Учётная запись неактивна в 1С.")
+
     phone = profile.get("phone")
     roles = profile.get("roles")
     messenger = profile.get("messengerUserId") or ""
+    names = (profile.get("firstName") or "", profile.get("lastName") or "",
+             profile.get("patronymic") or "")
+    birthday = profile.get("birthday")
 
     if (
         not isinstance(phone, str) or len(phone) != 11
         or not phone.startswith("7") or not phone.isascii() or not phone.isdigit()
-        or profile.get("isActive") is not True
         or not isinstance(roles, list) or not roles
+        or any(not isinstance(role, str) for role in roles)
         or len(roles) != len(set(roles))
-        or not set(roles) <= VALID_ROLES
+        or not set(roles).issubset(VALID_ROLES)
         or not isinstance(messenger, str)
+        or any(not isinstance(name, str) for name in names)
+        or birthday is not None and not isinstance(birthday, str)
     ):
-        raise AuthenticationFailed("Учётная запись неактивна или данные 1С некорректны.")
-
-    try:
-        with transaction.atomic():
-            user = User.objects.select_for_update().filter(pk=native_id).first()
-            by_phone = User.objects.select_for_update().filter(phone=phone).first()
-            if by_phone is not None and str(by_phone.pk) != native_id:
-                # Legacy Django UUIDs cannot be silently claimed as native IDs.
-                raise OneCUserServiceError(
-                    "onec_native_id_conflict",
-                    "В PostgreSQL осталась учётная запись со старым UUID. Требуется очистка тестовых данных.",
-                    status_code=409,
-                )
-            if messenger:
-                by_max = User.objects.select_for_update().filter(
-                    messenger_user_id=messenger,
-                ).first()
-                if by_max is not None and str(by_max.pk) != native_id:
-                    raise OneCUserServiceError(
-                        "onec_native_id_conflict",
-                        "MAX уже связан с другой локальной записью.",
-                        status_code=409,
-                    )
-
-            if user is None:
-                user = User.objects.create_user(
-                    id=UUID(native_id),
-                    phone=phone,
-                    password=None,
-                    first_name=profile.get("firstName") or "",
-                    last_name=profile.get("lastName") or "",
-                    patronymic=profile.get("patronymic") or "",
-                    messenger_user_id=messenger or None,
-                    onec_id=UUID(native_id),
-                )
-            else:
-                if user.phone != phone or (user.onec_id and str(user.onec_id) != native_id):
-                    raise OneCUserServiceError(
-                        "onec_native_id_conflict", "Локальный UUID не соответствует 1С.",
-                        status_code=409,
-                    )
-                fields = []
-                mirror = {
-                    "onec_id": UUID(native_id),
-                    "is_active": True,
-                    "messenger_user_id": messenger or None,
-                    "first_name": profile.get("firstName") or "",
-                    "last_name": profile.get("lastName") or "",
-                    "patronymic": profile.get("patronymic") or "",
-                }
-                for name, value in mirror.items():
-                    if getattr(user, name) != value:
-                        setattr(user, name, value)
-                        fields.append(name)
-                if fields:
-                    user.save(update_fields=fields)
-
-            UserRoleAssignment.objects.filter(user=user).exclude(role__in=roles).delete()
-            for role in roles:
-                UserRoleAssignment.objects.get_or_create(user=user, role=role)
-            return user
-    except IntegrityError as exc:
         raise OneCUserServiceError(
-            "onec_native_id_conflict", "Не удалось связать UUID пользователя 1С.",
-            status_code=409,
-        ) from exc
+            "onec_invalid_response", "1С вернула некорректные данные пользователя."
+        )
+
+    return OneCUser(
+        id=UUID(native_id), phone=phone, roles=tuple(roles),
+        messenger_user_id=messenger,
+        first_name=names[0], last_name=names[1], patronymic=names[2],
+        birthday=birthday,
+    )
