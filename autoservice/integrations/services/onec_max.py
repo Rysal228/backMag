@@ -1,14 +1,13 @@
-"""Private MAX business operations in 1C.
+"""HTTP client for MAX business operations in the existing 1C ServiceCarAPI.
 
-Only Django validates MAX signatures and sends bot messages. 1C is authoritative
-for MAX identity, account binding and one-time code state.
-The existing private Docker-to-Apache 1C hop uses HTTP. Allow only its exact
-known internal URL for HTTP; custom endpoints must use HTTPS. Basic service
-credentials are still required (HTTP Basic is not encrypted over that hop).
+Django validates MAX initData and contact signatures before sending identity
+claims to the 1C HTTP service. This uses the same backend-to-Apache connection
+as the existing user API; no additional Basic-auth credentials are required.
+Keep ServiceCarAPI reachable only through the existing trusted deployment
+network while these handlers have no independent caller authentication.
 """
 
 import os
-from urllib.parse import urlsplit
 from uuid import UUID
 
 import requests
@@ -26,58 +25,25 @@ class OneCMaxError(APIException):
         super().__init__(detail=detail, code=code)
 
 
-# The same known internal Apache endpoint already used by Django -> 1C.
-# Do not generalize this HTTP exemption to custom hosts or public addresses.
-INTERNAL_MAX_BASE_URL = "http://host.docker.internal:8081/ServiceCar/hs/api"
+# Use the same base URL as the existing 1C user API.
+DEFAULT_ONEC_BASE_URL = "http://host.docker.internal:8081"
+MAX_HTTP_PATH = "/ServiceCar/hs/api"
 
 
 class OneCMaxClient:
     def __init__(self):
-        self.base_url = os.environ.get(
-            "ONEC_MAX_BASE_URL", INTERNAL_MAX_BASE_URL,
-        ).strip().rstrip("/")
-        # The MAX methods run in the existing ServiceCarAPI HTTP service.
-        # Reuse existing technical credentials if MAX-specific ones are absent.
-        max_user = os.environ.get("ONEC_MAX_API_USER")
-        max_password = os.environ.get("ONEC_MAX_API_PASSWORD")
-        if max_user is not None or max_password is not None:
-            self.username = (max_user or "").strip()
-            self.password = max_password or ""
-        else:
-            self.username = (
-                os.environ.get("ONEC_API_USER")
-                or os.environ.get("ONEC_AUTH_API_USER")
-                or ""
-            ).strip()
-            self.password = (
-                os.environ.get("ONEC_API_PASSWORD")
-                or os.environ.get("ONEC_AUTH_API_PASSWORD")
-                or ""
-            )
-
-        parsed = urlsplit(self.base_url)
-        known_internal_http = self.base_url == INTERNAL_MAX_BASE_URL
-        valid_https = parsed.scheme == "https" and bool(parsed.hostname)
-        if (
-            not (known_internal_http or valid_https)
-            or parsed.username is not None
-            or parsed.password is not None
-            or parsed.query or parsed.fragment
-            or not self.base_url.endswith("/hs/api")
-            or not self.username or not self.password
-        ):
-            raise OneCMaxError(
-                "onec_max_not_configured",
-                "Не настроен доступ к служебному MAX-сервису 1С.",
-                status_code=503,
-            )
+        # No separate MAX environment variables or technical user credentials.
+        # The existing backend -> Apache HTTP publication handles this route.
+        self.base_url = (
+            os.environ.get("ONEC_BASE_URL", DEFAULT_ONEC_BASE_URL).strip().rstrip("/")
+            + MAX_HTTP_PATH
+        )
 
     def _post(self, path, payload):
         try:
             response = requests.post(
                 f"{self.base_url}/max/{path}",
                 json=payload,
-                auth=(self.username, self.password),
                 headers={"Accept": "application/json"},
                 timeout=10,
                 allow_redirects=False,
