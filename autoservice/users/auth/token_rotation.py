@@ -7,6 +7,7 @@ from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 
 from users.models import ConsumedRefreshToken
 from users.authentication import validate_native_claims
+from users.auth.tokens import TOKEN_VERSION
 
 
 def parse_refresh(raw):
@@ -50,6 +51,8 @@ def rotate_refresh(raw):
 
 def logout_refresh(raw, current_user):
     previous = parse_refresh(raw)
+    if previous.get("auth_version") != TOKEN_VERSION:
+        raise ValidationError({"refreshToken": "Токен старой версии."})
     if previous.get("user_id") != str(current_user.pk):
         raise ValidationError({"refreshToken": "Токен другого пользователя."})
     consume_refresh(previous)

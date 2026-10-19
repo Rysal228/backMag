@@ -2,10 +2,13 @@
 from rest_framework_simplejwt.tokens import RefreshToken
 from users.roles import resolve_active_role
 
+TOKEN_VERSION = "native-1c-v1"
+
 
 def _make_tokens(user, *, role, method, messenger_id=None, phone=None):
     refresh = RefreshToken()
     refresh["user_id"] = str(user.pk)
+    refresh["auth_version"] = TOKEN_VERSION
     refresh["auth_method"] = method
     refresh["active_role"] = role
     if method == "max":

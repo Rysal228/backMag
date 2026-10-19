@@ -4,9 +4,12 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from integrations.services.onec_users import OneCUsersClient, OneCUserServiceError
 from users.auth.identity import sync_native_user
+from users.auth.tokens import TOKEN_VERSION
 
 
 def validate_native_claims(token):
+    if token.get("auth_version") != TOKEN_VERSION:
+        raise AuthenticationFailed("Сессия старого формата. Войдите заново.")
     if token.get("auth_method") not in ("password", "max"):
         raise AuthenticationFailed("Недействительный способ авторизации.")
     user_id, role = token.get("user_id"), token.get("active_role")

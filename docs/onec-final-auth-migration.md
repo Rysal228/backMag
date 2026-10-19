@@ -17,7 +17,7 @@
 ## JWT и выход
 SimpleJWT используется для проверки подписи и срока действия,
 но выпуск происходит через `RefreshToken()` без `for_user()`.
-Payload содержит `user_id=onecId`, `auth_method`, `active_role`
+Payload содержит `user_id=onecId`, `auth_version=native-1c-v1`, `auth_method`, `active_role`
 и для MAX — подтверждённые MAX ID и телефон.
 
 Refresh rotation и logout используют таблицу `users_consumedrefreshtoken`.
@@ -67,3 +67,6 @@ fixtures, затем заново создать технического суп
 
 Не применять данную ветку, пока схема миграций и тесты не проверены на
 пустой PostgreSQL. Объединять после PR #54 и #55.
+
+Старые JWT без `auth_version=native-1c-v1` отвергаются; после
+обновления всем пользователям сайта нужно выполнить новый вход.
