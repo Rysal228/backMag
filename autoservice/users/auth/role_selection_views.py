@@ -49,6 +49,13 @@ class RoleSelectionView(APIView):
                     'MAX-сессия больше не действительна.'
                 )
 
+            from .max.services import MaxAuthService
+            MaxAuthService.validate_current_binding(
+                user=user,
+                messenger_user_id=user.messenger_user_id,
+                max_verified_phone=user.phone,
+            )
+
             tokens = create_max_auth_tokens(
                 user,
                 messenger_user_id=user.messenger_user_id,
