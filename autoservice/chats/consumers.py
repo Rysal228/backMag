@@ -1,13 +1,11 @@
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.utils import timezone
-from types import SimpleNamespace
-from uuid import UUID
 
-from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.tokens import AccessToken
+from users.authentication import validate_native_claims
 
 from integrations.services.onec_users import OneCUsersClient
-from users.auth.identity import sync_native_user
 
 from chats.models import ChatMessage, ChatRoom
 from chats.permissions import can_access_room_for
@@ -111,27 +109,13 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
     @database_sync_to_async
     def _authenticate_token(self, raw_token):
         try:
-            token = JWTAuthentication().get_validated_token(raw_token)
-            native_id = UUID(str(token.get('user_id', '')))
-            profile = OneCUsersClient().get_user_by_onec_id(native_id)
-            role = token.get('active_role')
-            if not role or role not in profile.get('roles', []):
-                return None
-            method = token.get('auth_method')
-            messenger = token.get('messenger_user_id', '')
-            max_phone = token.get('max_verified_phone', '')
-            if method == 'max' and (
-                not messenger or messenger != profile.get('messengerUserId')
-                or max_phone != profile.get('phone')
-            ):
-                return None
-            if method not in ('max', 'password'):
-                return None
-            user = sync_native_user(profile)
-            return user, role, int(token['exp']), method, messenger, max_phone
+            token = AccessToken(raw_token)
+            user, role = validate_native_claims(token)
+            return (
+                user, role, int(token["exp"]), token["auth_method"],
+                token.get("messenger_user_id", ""), token.get("max_verified_phone", ""),
+            )
         except Exception:
-            # Any 1C or token failure denies access, never falls back to local
-            # stale role assignments.
             return None
 
     @database_sync_to_async
@@ -142,8 +126,7 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
             .filter(pk=self.scope['url_route']['kwargs']['room_id'])
             .first()
         )
-        identity = SimpleNamespace(id=user_id, pk=user_id)
-        if room is None or not can_access_room_for(room, identity, role):
+        if room is None or not can_access_room_for(room, self.user, role):
             return None
         return room
 
@@ -156,6 +139,7 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
         if (
             profile.get('isActive') is not True
             or self.active_role not in profile.get('roles', [])
+            or profile.get('onecId') != str(self.user.pk)
         ):
             return False
         if self.auth_method == 'max' and (
