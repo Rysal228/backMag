@@ -25,11 +25,14 @@
 
 В репозитории 1c (ветка `feature/max-auth-onec`) добавлены:
 
-- HTTP-сервис `ServiceCarAuth` (/ServiceCar/hs/auth), **четыре POST-шаблона**:
+- Уже существующий HTTP-сервис `ServiceCarAPI` (/ServiceCar/hs/api), **четыре POST-шаблона**:
   `/max/resolve`, `/max/code/issue`, `/max/code/verify`,
   `/max/code/cancel`;
-- обработчики в его модуле, допускающие только авторизованного технического
-  пользователя информационной базы **servicecar-auth**;
+- обработчики в модуле `ServiceCarAPI`, использующие общие функции
+  `JSONОтвет`, `JSONОшибка`, `НормализоватьТелефон`, `ПолучитьРоли`;
+  только для MAX-маршрутов проверяется технический пользователь информационной
+  базы **servicecar-auth**; остальные обработчики `ServiceCarAPI` не менялись.
+  Старый `ServiceCarAuth` не используется для MAX и не изменяется;
 - регистр сведений `КодыАвторизацииMAX` с измерением Пользователь (ссылка
   на `ПользователиПриложения`) и ресурсом Состояние (строка до 1024);
 - обновлённые XML метаданных, Configuration.xml и ConfigDumpInfo.xml.
@@ -45,22 +48,25 @@
 
 **Никакого перехода Apache на HTTPS не требуется.** Между Django и 1С
 сохраняется существующее внутреннее HTTP-соединение:
-`http://host.docker.internal:8081/ServiceCar/hs/auth`. Именно этот адрес
+`http://host.docker.internal:8081/ServiceCar/hs/api`. Именно этот адрес
 используется по умолчанию, если переменная `ONEC_MAX_BASE_URL` не задана.
 
-Для доступа к закрытому HTTP-сервису `ServiceCarAuth` требуются учетные
-данные технического пользователя **servicecar-auth**:
+Для защищённых маршрутов MAX внутри `ServiceCarAPI` используются учетные
+данные пользователя 1С **servicecar-auth**:
 
 ```text
 ONEC_MAX_API_USER=servicecar-auth
 ONEC_MAX_API_PASSWORD=<technical-password>
 ```
 
-Если переменные `ONEC_MAX_API_*` не заданы, клиент использует уже существующие
-`ONEC_AUTH_API_USER` / `ONEC_AUTH_API_PASSWORD`. Для MAX нужны **обе**
-переменные выбранной пары. Если `ONEC_MAX_BASE_URL` всё же задана, её значение
+Если `ONEC_MAX_API_*` не заданы, Django пробует уже существующие
+`ONEC_API_USER` / `ONEC_API_PASSWORD` и затем `ONEC_AUTH_API_USER` /
+`ONEC_AUTH_API_PASSWORD`. Но учётная запись для вызова этих маршрутов
+**должна иметь имя servicecar-auth в 1С**. Если ранее задан другой технический
+пользователь, явно укажите `ONEC_MAX_API_USER=servicecar-auth` и его пароль.
+Для вызова MAX нужны **обе** переменные выбранной пары. Если `ONEC_MAX_BASE_URL` всё же задана, её значение
 для HTTP допускается только в точности
-`http://host.docker.internal:8081/ServiceCar/hs/auth`; для произвольных
+`http://host.docker.internal:8081/ServiceCar/hs/api`; для произвольных
 адресов необходим HTTPS. Переадресации запрещены.
 
 **Граница доверия:** HTTP Basic не шифрует логин, пароль или содержимое
