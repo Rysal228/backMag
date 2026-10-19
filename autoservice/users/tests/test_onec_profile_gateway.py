@@ -20,7 +20,7 @@ PHONE = "79999999999"
 
 def remote_profile(**changes):
     data = {
-        "externalId": UUID,
+        "onecId": UUID,
         "phone": PHONE,
         "firstName": "Имя из 1С",
         "lastName": "",
@@ -91,7 +91,7 @@ class OneCProfileGatewayTests(SimpleTestCase):
     @patch("users.onec_profile_views.OneCUsersClient")
     def test_rejects_mismatched_uuid(self, client_type):
         client_type.return_value.get_user.return_value = remote_profile(
-            externalId="f5eb4394-a4b7-4a18-bd30-8e9b9ff34c80"
+            onecId="f5eb4394-a4b7-4a18-bd30-8e9b9ff34c80"
         )
         response = self.call("GET")
         self.assertEqual(response.status_code, 502)
@@ -127,7 +127,7 @@ class OneCUsersClientTests(SimpleTestCase):
             ok=True, status_code=200, json=lambda: {"user": remote_profile()}
         )
         user = OneCUsersClient().get_user(PHONE)
-        self.assertEqual(user["externalId"], UUID)
+        self.assertEqual(user["onecId"], UUID)
         self.assertEqual(request.call_args.args[0], "GET")
         self.assertTrue(request.call_args.args[1].endswith("/" + PHONE))
         self.assertFalse(request.call_args.kwargs["allow_redirects"])

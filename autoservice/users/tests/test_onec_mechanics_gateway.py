@@ -9,7 +9,7 @@ from django.test import SimpleTestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from integrations.services.onec_users import OneCUserServiceError, OneCUsersClient
-from users.views import CustomUserViewSet
+from users.views import UserListView
 
 
 PHONE = "79999999999"
@@ -18,7 +18,7 @@ USER_ID = "44d93602-a058-4896-9f68-181bb34b4af3"
 
 def onec_profile():
     return {
-        "externalId": USER_ID, "phone": PHONE, "firstName": "User",
+        "onecId": USER_ID, "phone": PHONE, "firstName": "User",
         "lastName": "", "patronymic": "", "birthday": None,
         "isActive": True, "roles": ["user"],
     }
@@ -51,38 +51,31 @@ class OneCMechanicsViewTests(SimpleTestCase):
         force_authenticate(request, user=self.user, token={"active_role": "user"})
         request.active_role = "user"
 
-        response = CustomUserViewSet.as_view({"get": "list"})(request)
+        response = UserListView.as_view()(request)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data[0]["firstName"], "Имя из 1С")
-        client_type.return_value.get_user.assert_called_once_with(PHONE)
         client_type.return_value.list_mechanics.assert_called_once_with(
             search="Имя", ids=[mechanic()["id"]]
         )
 
     @patch("users.views.OneCUsersClient")
-    def test_missing_auth_role_fails_closed(self, client_type):
-        client_type.return_value.get_user.return_value = {
-            **onec_profile(), "roles": ["mechanic"]
-        }
-        request = self.factory.get("/api/v1/users/", {"role": "mechanic", "search": "Тест"})
+    def test_missing_role_filter_is_rejected(self, client_type):
+        request = self.factory.get("/api/v1/users/", {"search": "Тест"})
         force_authenticate(request, user=self.user, token={"active_role": "user"})
-        request.active_role = "user"
-        response = CustomUserViewSet.as_view({"get": "list"})(request)
-        self.assertIn(response.status_code, (401, 403))
+        response = UserListView.as_view()(request)
+        self.assertEqual(response.status_code, 400)
         client_type.return_value.list_mechanics.assert_not_called()
-
 
     @patch("users.views.OneCUsersClient")
     def test_1c_unavailable_never_falls_back_to_local_users(self, client_type):
-        client_type.return_value.get_user.side_effect = OneCUserServiceError(
+        client_type.return_value.list_mechanics.side_effect = OneCUserServiceError(
             "onec_unavailable", "Нет соединения с 1С."
         )
         request = self.factory.get("/api/v1/users/", {"role": "mechanic", "search": "Сер"})
         force_authenticate(request, user=self.user, token={"active_role": "user"})
-        request.active_role = "user"
-        response = CustomUserViewSet.as_view({"get": "list"})(request)
+        response = UserListView.as_view()(request)
         self.assertEqual(response.status_code, 502)
-        client_type.return_value.list_mechanics.assert_not_called()
+
 
 
 class OneCMechanicsClientTests(SimpleTestCase):

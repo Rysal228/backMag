@@ -246,7 +246,6 @@ class OneCPasswordAuthSecurityTests(SimpleTestCase):
         })
         self.assertTrue(OneCPasswordAuthClient().setup_initial_password(
             phone=PHONE, onec_id=NATIVE,
-            external_id="44d93602-a058-4896-9f68-181bb34b4af3",
             new_password="new-synthetic-123",
         ))
         self.assertTrue(post.call_args.args[0].endswith("/password/setup"))
@@ -263,7 +262,6 @@ class OneCPasswordAuthSecurityTests(SimpleTestCase):
         with self.assertRaises(OneCUserServiceError) as caught:
             OneCPasswordAuthClient().setup_initial_password(
                 phone=PHONE, onec_id=NATIVE,
-                external_id="44d93602-a058-4896-9f68-181bb34b4af3",
-                new_password="new-synthetic-123",
+                    new_password="new-synthetic-123",
             )
         self.assertEqual(caught.exception.status_code, 409)

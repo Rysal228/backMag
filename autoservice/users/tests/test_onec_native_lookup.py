@@ -10,7 +10,6 @@ from integrations.services.onec_users import OneCUserServiceError, OneCUsersClie
 
 
 ONEC_ID = "37262ee6-c98a-11f1-9abc-fa163e59c328"
-LEGACY_ID = "72e4ff86-8922-4e96-9087-500f4fb1f5bc"
 PHONE = "79135552525"
 ROOT = "http://host.docker.internal:8081/ServiceCar/hs/api/user"
 
@@ -18,7 +17,6 @@ ROOT = "http://host.docker.internal:8081/ServiceCar/hs/api/user"
 def profile(**overrides):
     user = {
         "onecId": ONEC_ID,
-        "externalId": LEGACY_ID,
         "phone": PHONE,
         "firstName": "Сергей",
         "lastName": "Чер",
