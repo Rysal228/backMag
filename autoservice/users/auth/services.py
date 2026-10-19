@@ -61,9 +61,14 @@ class AuthService:
 
     @staticmethod
     def switch_role(*, user, role: str, token=None) -> dict[str, str]:
-        active_role = resolve_active_role(user, role)
-
         if token is not None and token.get('auth_method') == 'max':
+            from .max.services import MaxAuthService
+            MaxAuthService.validate_current_binding(
+                user=user,
+                messenger_user_id=token.get('messenger_user_id', ''),
+                max_verified_phone=token.get('max_verified_phone', ''),
+            )
+            active_role = resolve_active_role(user, role)
             return create_max_auth_tokens(
                 user,
                 messenger_user_id=token.get('messenger_user_id', ''),
@@ -71,6 +76,7 @@ class AuthService:
                 active_role=active_role,
             )
 
+        active_role = resolve_active_role(user, role)
         return create_auth_tokens(user, active_role=active_role)
 
     @staticmethod
@@ -132,6 +138,18 @@ class AuthService:
             raise ValidationError({
                 'currentPassword': 'Для создания пароля подтвердите вход через MAX.'
             })
+
+        from .max.services import MaxAuthService
+        try:
+            MaxAuthService.validate_current_binding(
+                user=user,
+                messenger_user_id=user.messenger_user_id,
+                max_verified_phone=user.phone,
+            )
+        except AuthenticationFailed as exc:
+            raise ValidationError({
+                'currentPassword': 'Повторно подтвердите вход через MAX.'
+            }) from exc
 
     @staticmethod
     def _validate_onec_setup_profile(*, user, profile) -> str:
