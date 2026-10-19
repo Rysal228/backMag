@@ -111,7 +111,7 @@ WSGI_APPLICATION = 'autoservice.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'servicecar',
+        'NAME': os.environ.get('DJANGO_DB_NAME', 'servicecar'),
         'USER': 'servicecar_django',
         'PASSWORD': 'Baba1234',
         'HOST': '172.18.0.1',
