@@ -169,9 +169,68 @@ class OneCMaxClientTests(SimpleTestCase):
         "ONEC_MAX_API_USER": "servicecar-auth",
         "ONEC_MAX_API_PASSWORD": "password",
     })
-    def test_plaintext_is_rejected_even_on_internal_host(self):
+    @patch("integrations.services.onec_max.requests.post")
+    def test_existing_internal_apache_http_is_supported(self, post):
+        post.return_value = Mock(status_code=200, json=lambda: {
+            "status": "ok", "user": profile(),
+        })
+        self.assertEqual(
+            OneCMaxClient().resolve(messenger_user_id=MAX_ID), profile()
+        )
+        self.assertEqual(
+            post.call_args.args[0],
+            "http://host.docker.internal:8081/ServiceCar/hs/auth/max/resolve",
+        )
+        self.assertEqual(
+            post.call_args.kwargs["auth"], ("servicecar-auth", "password")
+        )
+        self.assertFalse(post.call_args.kwargs["allow_redirects"])
+
+    @patch.dict("os.environ", {
+        "ONEC_MAX_BASE_URL": "http://onec.example.test/ServiceCar/hs/auth",
+        "ONEC_MAX_API_USER": "servicecar-auth",
+        "ONEC_MAX_API_PASSWORD": "password",
+    })
+    def test_http_on_other_hosts_is_rejected(self):
         with self.assertRaises(OneCMaxError):
             OneCMaxClient()
+
+    @patch.dict("os.environ", {
+        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8082/ServiceCar/hs/auth",
+        "ONEC_MAX_API_USER": "servicecar-auth",
+        "ONEC_MAX_API_PASSWORD": "password",
+    })
+    def test_http_on_other_ports_is_rejected(self):
+        with self.assertRaises(OneCMaxError):
+            OneCMaxClient()
+
+    @patch.dict("os.environ", {
+        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8081/ServiceCar/hs/auth",
+        "ONEC_MAX_API_USER": "servicecar-auth",
+        "ONEC_MAX_API_PASSWORD": "",
+    })
+    def test_basic_credentials_remain_required(self):
+        with self.assertRaises(OneCMaxError):
+            OneCMaxClient()
+
+    @patch.dict("os.environ", {
+        "ONEC_MAX_BASE_URL": "http://host.docker.internal:8081/ServiceCar/hs/auth",
+        "ONEC_MAX_API_USER": "servicecar-auth",
+        "ONEC_MAX_API_PASSWORD": "password",
+    })
+    def test_default_internal_url_when_env_unset(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with patch.dict("os.environ", {
+                "ONEC_AUTH_API_USER": "servicecar-auth",
+                "ONEC_AUTH_API_PASSWORD": "password",
+            }):
+                client = OneCMaxClient()
+        self.assertEqual(
+            client.base_url, "http://host.docker.internal:8081/ServiceCar/hs/auth"
+        )
+        self.assertEqual(
+            (client.username, client.password), ("servicecar-auth", "password")
+        )
 
     @patch.dict("os.environ", {
         "ONEC_MAX_BASE_URL": "https://onec.example.test/ServiceCar/hs/auth",
@@ -179,7 +238,7 @@ class OneCMaxClientTests(SimpleTestCase):
         "ONEC_MAX_API_PASSWORD": "password",
     })
     @patch("integrations.services.onec_max.requests.post")
-    def test_client_sends_basic_over_https_and_never_follows_redirect(self, post):
+    def test_https_also_supported_and_never_follows_redirect(self, post):
         post.return_value = Mock(status_code=200, json=lambda: {
             "status": "ok", "user": profile(),
         })
