@@ -44,11 +44,15 @@ class OneCMaxClient:
             self.username = (max_user or "").strip()
             self.password = max_password or ""
         else:
-            self.username = os.environ.get(
-                "ONEC_API_USER", os.environ.get("ONEC_AUTH_API_USER", "")
+            self.username = (
+                os.environ.get("ONEC_API_USER")
+                or os.environ.get("ONEC_AUTH_API_USER")
+                or ""
             ).strip()
-            self.password = os.environ.get(
-                "ONEC_API_PASSWORD", os.environ.get("ONEC_AUTH_API_PASSWORD", "")
+            self.password = (
+                os.environ.get("ONEC_API_PASSWORD")
+                or os.environ.get("ONEC_AUTH_API_PASSWORD")
+                or ""
             )
 
         parsed = urlsplit(self.base_url)
