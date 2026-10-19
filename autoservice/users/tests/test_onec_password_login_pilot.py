@@ -259,7 +259,8 @@ class OneCPasswordLoginTests(SimpleTestCase):
             'phone': PHONE, 'isActive': True, 'hasPassword': False,
             'roles': ['user'], 'messengerUserId': 'max-user-123',
         }
-        AuthService.set_password(
+        with patch('users.auth.max.services.MaxAuthService.validate_current_binding'):
+            AuthService.set_password(
             user=user, current_password=None,
             new_password='new-synthetic-password',
             token={'auth_method': 'max',
@@ -293,6 +294,7 @@ class OneCPasswordLoginTests(SimpleTestCase):
             'roles': ['user'], 'messengerUserId': 'max-user-123',
         }
         with self.assertRaises(OneCUserServiceError) as caught:
+            with patch('users.auth.max.services.MaxAuthService.validate_current_binding'):
             AuthService.set_password(
                 user=user, current_password=None,
                 new_password='new-synthetic-password',
