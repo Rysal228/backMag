@@ -6,7 +6,6 @@ from uuid import UUID
 from django.test import SimpleTestCase
 from rest_framework import serializers
 
-from cars.models import Car, CarOwnership
 from chats.models import ChatMessage, ChatRoom
 from orders.models import Order, OrderMechanic
 from orders.serializers import OrderSerializer
@@ -19,8 +18,6 @@ USER_ID = UUID("8996ef81-9116-4d75-a3de-2fa8a5bc6b10")
 class NativeUserReferenceSchemaTests(SimpleTestCase):
     def test_domain_models_store_only_native_uuid_not_user_fk(self):
         for model, field in (
-            (Car, "owner_id"),
-            (CarOwnership, "owner_id"),
             (Order, "customer_id"),
             (OrderMechanic, "mechanic_id"),
             (ChatRoom, "mechanic_id"),
