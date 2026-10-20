@@ -17,6 +17,7 @@ BRAND = "21afe47c-5403-4805-9442-b1d10e84f97d"
 MODEL = "8449407b-315d-4fa9-b058-2727c43a1b78"
 
 
+@patch.dict("os.environ", {"ONEC_API_USER": "test-account", "ONEC_API_PASSWORD": "test-password"})
 class OneCCarsContractTests(SimpleTestCase):
     @patch("integrations.services.onec_cars.requests.request")
     @patch.dict("os.environ", {"ONEC_BASE_URL": "http://host.docker.internal:8081"})
