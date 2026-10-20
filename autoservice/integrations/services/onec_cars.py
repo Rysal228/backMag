@@ -32,10 +32,14 @@ class OneCCarsClient:
         self.path = os.environ.get("ONEC_CARS_PATH", "/ServiceCar/hs/api").strip("/")
         self.user = os.environ.get("ONEC_API_USER")
         self.password = os.environ.get("ONEC_API_PASSWORD")
-        if bool(self.user) != bool(self.password):
-            raise OneCCarError("invalid_credentials", "Учётные данные 1С настроены неполностью.", 503)
-        if not self.user and self.base != DEFAULT_BASE_URL:
-            raise OneCCarError("missing_credentials", "Для 1С необходимы сервисные учётные данные.", 503)
+        # Vehicles (including VIN and ownership) are sensitive; never use the
+        # old anonymous/internal user-lookup exception for vehicle endpoints.
+        if not self.user or not self.password:
+            raise OneCCarError(
+                "onec_cars_credentials_required",
+                "Для доступа к автомобилям нужна сервисная учётная запись 1С.",
+                503,
+            )
 
     def _call(self, method, resource, identifier=None, *, params=None, payload=None):
         url = f"{self.base}/{self.path}/{resource}"
