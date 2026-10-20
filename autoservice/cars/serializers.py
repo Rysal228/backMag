@@ -41,6 +41,7 @@ class CarWriteSerializer(serializers.Serializer):
     plate_number = serializers.CharField(
         max_length=20, required=False, allow_blank=True, allow_null=True,
     )
+    photo = serializers.ImageField(required=False, allow_null=True)
 
     def validate_vin(self, value):
         value = (value or "").strip().upper()
