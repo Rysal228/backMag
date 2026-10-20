@@ -8,7 +8,6 @@ from django.db.models import Q
 from django.utils import timezone
 
 from users.models import UserRole
-from cars.models import Car
 
 
 class OrderFilterKey(models.TextChoices):
@@ -380,7 +379,10 @@ class Order(models.Model):
     # Immutable historical snapshot for search and display without a local user model.
     customer_phone_snapshot = models.CharField(max_length=20, blank=True)
     customer_name_snapshot = models.CharField(max_length=450, blank=True)
-    car = models.ForeignKey(Car, on_delete=models.PROTECT, related_name='orders')
+    # Native 1C Catalog.Автомобили UUID, not an ORM relation.
+    car_id = models.UUIDField(db_index=True)
+    car_brand_id = models.UUIDField(db_index=True)
+    car_model_id = models.UUIDField(db_index=True)
     car_brand_snapshot = models.CharField(max_length=100)
     car_model_snapshot = models.CharField(max_length=100)
     car_year_snapshot = models.PositiveIntegerField()

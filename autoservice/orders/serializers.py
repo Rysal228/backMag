@@ -4,7 +4,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
-from cars.models import Car
+from integrations.services.onec_cars import OneCCarsClient
 from orders.services.appointment_availability import AppointmentAvailabilityService
 from orders.services.order_workflow import OrderWorkflowService
 from users.models import UserRole
@@ -178,6 +178,7 @@ class OrderSerializer(serializers.ModelSerializer):
     mechanics = serializers.ListField(
         child=serializers.UUIDField(), source='mechanic_ids', required=False,
     )
+    car = serializers.UUIDField(source='car_id')
     carYear = serializers.IntegerField(source='car_year_snapshot', read_only=True)
     carVin = serializers.CharField(source='car_vin_snapshot', read_only=True, allow_null=True)
     carPlateNumber = serializers.CharField(source='car_plate_number_snapshot', read_only=True, allow_null=True)
@@ -268,13 +269,18 @@ class OrderSerializer(serializers.ModelSerializer):
     def get_permissions(self, obj):
         return OrderWorkflowService.permissions(obj, self.context['request'])
 
-    def validate_car(self, value: Car):
+    def validate_car(self, value):
         request = self.context.get('request')
+        # Validation and authoritative vehicle state come exclusively from 1C.
+        car = OneCCarsClient().get(value)
         if request and (
-            value.owner_id != request.user.id
-            or value.is_archived
+            car['ownerId'] != str(request.user.id)
+            or car['status'] != 'active'
         ):
-            raise serializers.ValidationError('Выбранный автомобиль недоступен для создания заказа.')
+            raise serializers.ValidationError(
+                'Выбранный автомобиль недоступен для создания заказа.'
+            )
+        self._validated_car = car
         return value
 
     def validate_appointmentAt(self, value):
@@ -290,7 +296,7 @@ class OrderSerializer(serializers.ModelSerializer):
         request = self.context['request']
         if instance is None:
             return attrs
-        if 'car' in attrs:
+        if 'car_id' in attrs:
             raise serializers.ValidationError({'car': 'Автомобиль заказа нельзя заменить после его создания.'})
         if 'appointment_at' in attrs and not OrderWorkflowService.can_edit_appointment(instance, request):
             raise serializers.ValidationError({'appointmentAt': 'Изменение даты записи недоступно на текущем этапе заказа.'})
@@ -334,7 +340,7 @@ class OrderSerializer(serializers.ModelSerializer):
         works = validated_data.pop('works', None)
         work_type_names = validated_data.pop('workTypes', None)
         mechanics = validated_data.pop('mechanic_ids', [])
-        car = validated_data['car']
+        car = self._validated_car
         if works is None:
             if work_type_names is None:
                 raise serializers.ValidationError({'works': 'Необходимо указать работы заказа.'})
@@ -353,11 +359,13 @@ class OrderSerializer(serializers.ModelSerializer):
             status=status,
             work_status=work_status,
             payment_status=payment_status,
-            car_brand_snapshot=car.brand.name,
-            car_model_snapshot=car.model.name,
-            car_year_snapshot=car.year,
-            car_vin_snapshot=car.vin,
-            car_plate_number_snapshot=car.plate_number,
+            car_brand_id=car['brand'],
+            car_model_id=car['model'],
+            car_brand_snapshot=car['brandName'],
+            car_model_snapshot=car['modelName'],
+            car_year_snapshot=car['year'],
+            car_vin_snapshot=car.get('vin') or None,
+            car_plate_number_snapshot=car.get('plate_number') or None,
             **validated_data,
         )
         self._replace_order_works(order, works)

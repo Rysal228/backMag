@@ -1,224 +1,296 @@
+import base64
+"""Vehicle HTTP API facade: 1C owns cars, Django owns auth and order links."""
+from uuid import UUID
+
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
-from rest_framework import permissions, viewsets
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 
-from cars.models import Car, CarBrand, CarModel
 from cars.pagination import CarPagination
-from cars.serializers import CarSerializer, CarBrandSerializer, CarModelSerializer
+from cars.serializers import CarWriteSerializer, CarSerializer
+from integrations.services.onec_cars import OneCCarsClient, OneCCarError, canonical_uuid
+from integrations.services.onec_users import OneCUsersClient
 from orders.filters import OrderFilter
+from orders.models import Order
 from orders.pagination import OrderPagination
 from orders.permissions import validate_filter_permissions
 from orders.serializers import OrderSerializer
 from users.auth.services import PhoneNormalizer
-from integrations.services.onec_users import OneCUsersClient
 from users.models import UserRole
+from users.onec_lookup import get_native_profile, native_display_name
 
 
-class CarBrandViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = CarBrand.objects.all().order_by('name')
-    serializer_class = CarBrandSerializer
+def _same_uuid(a, b):
+    return str(a).lower() == str(b).lower()
+
+
+class CarBrandViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
+    def list(self, request):
+        return Response(OneCCarsClient().brands())
 
-class CarModelViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = CarModelSerializer
+    def retrieve(self, request, pk=None):
+        identifier = canonical_uuid(pk)
+        brand = next(
+            (x for x in OneCCarsClient().brands() if _same_uuid(x["id"], identifier)),
+            None,
+        )
+        if brand is None:
+            raise NotFound("Марка не найдена.")
+        return Response(brand)
+
+
+class CarModelViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
-        queryset = CarModel.objects.select_related('brand').all().order_by('name')
-        brand_id = self.request.query_params.get('brand')
+    def list(self, request):
+        brand = request.query_params.get("brand")
+        return Response(OneCCarsClient().models(brand=brand))
 
-        if brand_id:
-            queryset = queryset.filter(brand_id=brand_id)
+    def retrieve(self, request, pk=None):
+        identifier = canonical_uuid(pk)
+        model = next(
+            (x for x in OneCCarsClient().models() if _same_uuid(x["id"], identifier)),
+            None,
+        )
+        if model is None:
+            raise NotFound("Модель не найдена.")
+        return Response(model)
 
-        return queryset
 
-
-class CarViewSet(viewsets.ModelViewSet):
-    serializer_class = CarSerializer
+class CarViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = CarPagination
 
-    def get_queryset(self):
-        queryset = Car.objects.all()
-        active_role = self.request.active_role
-        status = self.request.query_params.get('status')
+    def _accessible(self, request):
+        client = OneCCarsClient()
+        if request.active_role == UserRole.USER:
+            records = client.list_cars(owner=request.user.id)
+            # Do not trust the filtering done by the remote service alone.
+            return [x for x in records if _same_uuid(x["ownerId"], request.user.id)]
+        records = client.list_cars()
+        if request.active_role == UserRole.MECHANIC:
+            allowed = {
+                str(x).lower()
+                for x in Order.objects.filter(
+                    mechanic_links__mechanic_id=request.user.id
+                ).values_list("car_id", flat=True)
+            }
+            return [x for x in records if x["id"].lower() in allowed]
+        if request.active_role == UserRole.ADMIN:
+            return records
+        raise PermissionDenied("Недопустимая роль.")
 
-        if active_role == UserRole.USER:
-            queryset = queryset.filter(owner_id=self.request.user.id)
-        elif active_role == UserRole.MECHANIC:
-            queryset = queryset.filter(
-                orders__mechanic_links__mechanic_id=self.request.user.id,
-            ).distinct()
+    def _queryset(self, request):
+        records = self._accessible(request)
+        role = request.active_role
+        state = request.query_params.get("status")
+        if state not in ("active", "archived", "all"):
+            state = "all" if role == UserRole.ADMIN else "active"
+        if state != "all":
+            records = [x for x in records if x["status"] == state]
 
-        if status not in {'active', 'archived', 'all'}:
-            status = 'active' if active_role in {UserRole.USER, UserRole.MECHANIC} else 'all'
-
-        if status == 'active':
-            queryset = queryset.filter(is_archived=False)
-        elif status == 'archived':
-            queryset = queryset.filter(is_archived=True)
-
-        if active_role in {UserRole.MECHANIC, UserRole.ADMIN}:
-            owner_phone = self.request.query_params.get('owner_phone')
+        if role in (UserRole.MECHANIC, UserRole.ADMIN):
+            owner_phone = request.query_params.get("owner_phone")
             if owner_phone:
-                owner_phone = PhoneNormalizer.normalize(owner_phone)
-                profile = OneCUsersClient().get_user(owner_phone)
-                queryset = queryset.filter(owner_id=profile["onecId"])
+                profile = OneCUsersClient().get_user(
+                    PhoneNormalizer.normalize(owner_phone)
+                )
+                records = [x for x in records
+                           if _same_uuid(x["ownerId"], profile["onecId"])]
 
-        brand_id = self.request.query_params.get('brand')
-        if brand_id:
-            queryset = queryset.filter(brand_id=brand_id)
+        for field in ("brand", "model"):
+            identifier = request.query_params.get(field)
+            if identifier:
+                identifier = canonical_uuid(identifier)
+                records = [x for x in records if _same_uuid(x[field], identifier)]
 
-        model_id = self.request.query_params.get('model')
-        if model_id:
-            queryset = queryset.filter(model_id=model_id)
-
-        year = self.request.query_params.get('year')
+        year = request.query_params.get("year")
         if year:
             try:
-                queryset = queryset.filter(year=int(year))
+                records = [x for x in records if x["year"] == int(year)]
             except ValueError:
                 pass
+        for field in ("vin", "plate_number"):
+            needle = request.query_params.get(field)
+            if needle:
+                records = [x for x in records if needle.strip().casefold()
+                           in (x.get(field) or "").casefold()]
+        return sorted(records, key=lambda x: (
+            x["brandName"].casefold(), x["modelName"].casefold(), x["id"]
+        ))
 
-        vin = self.request.query_params.get('vin')
-        if vin:
-            queryset = queryset.filter(vin__icontains=vin.strip())
+    def _get_authorized(self, request, pk):
+        identifier = canonical_uuid(pk)
+        car = OneCCarsClient().get(identifier)
+        if request.active_role == UserRole.USER:
+            if not _same_uuid(car["ownerId"], request.user.id):
+                raise NotFound("Автомобиль не найден.")
+        elif request.active_role == UserRole.MECHANIC:
+            if not Order.objects.filter(
+                car_id=identifier,
+                mechanic_links__mechanic_id=request.user.id,
+            ).exists():
+                raise NotFound("Автомобиль не найден.")
+        elif request.active_role != UserRole.ADMIN:
+            raise PermissionDenied("Недопустимая роль.")
+        return car
 
-        plate_number = self.request.query_params.get('plate_number')
-        if plate_number:
-            queryset = queryset.filter(plate_number__icontains=plate_number.strip())
+    def _decorate(self, car, context):
+        result = dict(car)
+        owner = get_native_profile(car["ownerId"], context)
+        result["ownerName"] = native_display_name(owner)
+        result["ownerPhone"] = owner["phone"]
+        result["hasOrders"] = Order.objects.filter(car_id=car["id"]).exists()
+        return result
 
-        return queryset.select_related('brand', 'model').order_by(
-            'brand__name',
-            'model__name',
-            'id',
+    def list(self, request):
+        records = self._queryset(request)
+        paginator = CarPagination()
+        page = paginator.paginate_queryset(records, request, view=self)
+        context = {"request": request}
+        return paginator.get_paginated_response(
+            CarSerializer([self._decorate(x, context) for x in page], many=True).data
         )
 
-    @action(detail=True, methods=['get'])
+    def retrieve(self, request, pk=None):
+        car = self._get_authorized(request, pk)
+        return Response(CarSerializer(self._decorate(car, {"request": request})).data)
+
+    @action(detail=True, methods=["get"])
     def navigation(self, request, pk=None):
-        cars = self.get_queryset()
-        current_car = self.get_object()
-
-        previous_car = (
-            cars
-            .filter(
-                Q(brand__name__lt=current_car.brand.name)
-                | Q(
-                    brand__name=current_car.brand.name,
-                    model__name__lt=current_car.model.name,
-                )
-                | Q(
-                    brand__name=current_car.brand.name,
-                    model__name=current_car.model.name,
-                    id__lt=current_car.id,
-                )
-            )
-            .order_by('-brand__name', '-model__name', '-id')
-            .first()
+        car = self._get_authorized(request, pk)
+        records = self._queryset(request)
+        current_index = next(
+            (i for i, item in enumerate(records) if _same_uuid(item["id"], car["id"])),
+            None,
         )
-
-        next_car = (
-            cars
-            .filter(
-                Q(brand__name__gt=current_car.brand.name)
-                | Q(
-                    brand__name=current_car.brand.name,
-                    model__name__gt=current_car.model.name,
-                )
-                | Q(
-                    brand__name=current_car.brand.name,
-                    model__name=current_car.model.name,
-                    id__gt=current_car.id,
-                )
-            )
-            .order_by('brand__name', 'model__name', 'id')
-            .first()
-        )
-
+        if current_index is None:
+            raise NotFound("Автомобиль не найден в текущем списке.")
+        context = {"request": request}
+        previous = (self._decorate(records[current_index - 1], context)
+                    if current_index else None)
+        following = (self._decorate(records[current_index + 1], context)
+                     if current_index + 1 < len(records) else None)
         return Response({
-            'previous': CarSerializer(previous_car, context={'request': request}).data if previous_car else None,
-            'next': CarSerializer(next_car, context={'request': request}).data if next_car else None,
+            "previous": CarSerializer(previous).data if previous else None,
+            "next": CarSerializer(following).data if following else None,
         })
 
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=["get"])
     def orders(self, request, pk=None):
-        if request.active_role == UserRole.USER:
-            car = get_object_or_404(Car, pk=pk, owner_id=request.user.id)
-        else:
-            car = self.get_object()
-
+        car = self._get_authorized(request, pk)
         validate_filter_permissions(request)
-
-        orders = (
-            car.orders
-            .select_related(
-                'car__brand',
-                'car__model',
-                'status',
-                'work_status',
-                'payment_status',
-                    'busy_slot',
-            )
-            .prefetch_related(
-                'works__work_type',
-            )
-            .filter(customer_id=request.user.id)
-            .order_by('-created_at')
-        )
+        orders = Order.objects.filter(
+            car_id=car["id"], customer_id=request.user.id,
+        ).select_related(
+            "status", "work_status", "payment_status", "busy_slot"
+        ).prefetch_related("works__work_type").order_by("-created_at")
         orders = OrderFilter(request.query_params, queryset=orders, request=request).qs
-
         paginator = OrderPagination()
         page = paginator.paginate_queryset(orders, request, view=self)
-        serializer = OrderSerializer(page, many=True, context={'request': request})
+        return paginator.get_paginated_response(
+            OrderSerializer(page, many=True, context={"request": request}).data
+        )
 
-        return paginator.get_paginated_response(serializer.data)
+    @staticmethod
+    def _prepare_photo(fields):
+        file = fields.pop("photo", ...)
+        if file is ...:
+            return
+        if file is None:
+            raise ValidationError({"photo": "Очистка фотографии пока не поддерживается."})
+        if file.size > 2 * 1024 * 1024:
+            raise ValidationError({"photo": "Фотография не должна превышать 2 МиБ."})
+        mime = getattr(file, "content_type", None)
+        if mime not in ("image/jpeg", "image/png", "image/webp"):
+            raise ValidationError({"photo": "Допустимые форматы: JPEG, PNG и WebP."})
+        fields["photoBase64"] = base64.b64encode(file.read()).decode("ascii")
+        fields["photoMime"] = mime
 
-    @action(detail=True, methods=['post'])
+    @staticmethod
+    def _validate_brand_model(data):
+        # Server-side cross-catalog validation, repeated inside 1C itself.
+        client = OneCCarsClient()
+        if "brand" in data and "model" in data:
+            if not any(_same_uuid(x["id"], data["model"])
+                       for x in client.models(brand=data["brand"])):
+                raise ValidationError({
+                    "model": "Выбранная модель не относится к указанной марке."
+                })
+
+    def create(self, request):
+        if request.active_role != UserRole.USER:
+            raise PermissionDenied("Только пользователь может добавлять автомобили.")
+        serializer = CarWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        fields = dict(serializer.validated_data)
+        self._prepare_photo(fields)
+        self._validate_brand_model(fields)
+        fields["ownerId"] = str(request.user.id)
+        for field in ("brand", "model"):
+            fields[field] = str(fields[field])
+        result = OneCCarsClient().create(fields)
+        if not _same_uuid(result["ownerId"], request.user.id):
+            raise OneCCarError("identity_mismatch", "1С вернула неверного владельца.")
+        return Response(CarSerializer(self._decorate(result, {"request": request})).data,
+                        status=status.HTTP_201_CREATED)
+
+    def _update(self, request, pk, partial):
+        if request.active_role != UserRole.USER:
+            raise PermissionDenied("Только владелец может изменять автомобиль.")
+        car = self._get_authorized(request, pk)
+        if car["status"] == "archived":
+            raise ValidationError({"detail": "Архивный автомобиль нельзя изменять."})
+        self._no_photo(request)
+        serializer = CarWriteSerializer(data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        fields = dict(serializer.validated_data)
+        self._prepare_photo(fields)
+        if Order.objects.filter(car_id=car["id"]).exists():
+            immutable = ("brand", "model", "year", "vin")
+            changed = [
+                name for name in immutable
+                if name in fields
+                and str(fields[name] or "").upper() != str(car[name] or "").upper()
+            ]
+            if changed:
+                raise ValidationError({name: "Поле нельзя изменить при наличии заказов."
+                                       for name in changed})
+        checked = dict(car)
+        checked.update(fields)
+        self._validate_brand_model(checked)
+        for field in ("brand", "model"):
+            if field in fields:
+                fields[field] = str(fields[field])
+        result = OneCCarsClient().patch(car["id"], fields)
+        if not _same_uuid(result["ownerId"], request.user.id):
+            raise OneCCarError("identity_mismatch", "1С вернула неверного владельца.")
+        return Response(CarSerializer(self._decorate(result, {"request": request})).data)
+
+    def update(self, request, pk=None):
+        return self._update(request, pk, partial=False)
+
+    def partial_update(self, request, pk=None):
+        return self._update(request, pk, partial=True)
+
+    def destroy(self, request, pk=None):
+        if request.active_role != UserRole.USER:
+            raise PermissionDenied("Только владелец может архивировать автомобиль.")
+        car = self._get_authorized(request, pk)
+        OneCCarsClient().archive(car["id"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"])
     def restore(self, request, pk=None):
         if request.active_role != UserRole.USER:
-            raise PermissionDenied('Только пользователь может восстанавливать автомобиль.')
-
-        car = get_object_or_404(Car, pk=pk, owner_id=request.user.id)
-
-        if not car.is_archived:
-            raise ValidationError({'detail': 'Автомобиль уже активен.'})
-
-        car.is_archived = False
-        car.save(update_fields=['is_archived'])
-
-        return Response(CarSerializer(car, context={'request': request}).data)
-
-    def create(self, request, *args, **kwargs):
-        if request.active_role != UserRole.USER:
-            raise PermissionDenied('Только пользователь может добавлять автомобили.')
-
-        return super().create(request, *args, **kwargs)
-
-    def update(self, request, *args, **kwargs):
-        self._ensure_owner_can_manage()
-        return super().update(request, *args, **kwargs)
-
-    def partial_update(self, request, *args, **kwargs):
-        self._ensure_owner_can_manage()
-        return super().partial_update(request, *args, **kwargs)
-
-    def perform_destroy(self, instance):
-        self._ensure_owner_can_manage(instance)
-        instance.is_archived = True
-        instance.save(update_fields=['is_archived'])
-
-    def _ensure_owner_can_manage(self, instance=None):
-        if self.request.active_role != UserRole.USER:
-            raise PermissionDenied(
-                'Только владелец автомобиля может изменять или удалять его.'
-            )
-
-        instance = instance or self.get_object()
-        if instance.owner_id != self.request.user.id:
-            raise PermissionDenied(
-                'Только владелец автомобиля может изменять или удалять его.'
-            )
+            raise PermissionDenied("Только пользователь может восстанавливать автомобиль.")
+        car = self._get_authorized(request, pk)
+        if car["status"] != "archived":
+            raise ValidationError({"detail": "Автомобиль уже активен."})
+        result = OneCCarsClient().restore(car["id"])
+        return Response(CarSerializer(self._decorate(result, {"request": request})).data)

@@ -133,11 +133,11 @@ class OrderMechanicInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('order_number', 'customer_id', 'car', 'mechanics_display', 'work_types_display', 'status', 'work_status', 'appointment_at', 'total_price_display')
+    list_display = ('order_number', 'customer_id', 'car_id', 'mechanics_display', 'work_types_display', 'status', 'work_status', 'appointment_at', 'total_price_display')
     list_filter = ('status', 'work_status', 'works__work_type')
     search_fields = (
         'order_number', 'customer_phone_snapshot', 'customer_name_snapshot',
-        'car__plate_number',
+        'car_plate_number_snapshot',
     )
     inlines = (OrderWorkInline, OrderMechanicInline)
 

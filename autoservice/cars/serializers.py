@@ -1,144 +1,52 @@
+"""HTTP serialization only. Vehicle models are authoritative in 1C."""
 import re
-
-from django.db import transaction
+from datetime import date
 from rest_framework import serializers
 
-from cars.models import Car, CarBrand, CarModel, CarOwnership
-from users.onec_lookup import get_native_profile, native_display_name
+
+class CarBrandSerializer(serializers.Serializer):
+    id = serializers.UUIDField(read_only=True)
+    name = serializers.CharField(read_only=True)
 
 
-class CarBrandSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CarBrand
-        fields = (
-            'id',
-            'name',
-        )
+class CarModelSerializer(serializers.Serializer):
+    id = serializers.UUIDField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    brand = serializers.UUIDField(read_only=True)
 
 
-class CarModelSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CarModel
-        fields = (
-            'id',
-            'name',
-            'brand',
-        )
-
-
-class CarSerializer(serializers.ModelSerializer):
-    brandName = serializers.CharField(
-        source='brand.name',
-        read_only=True,
-    )
-    ownerName = serializers.SerializerMethodField()
-    ownerPhone = serializers.SerializerMethodField()
-    modelName = serializers.CharField(
-        source='model.name',
-        read_only=True,
-    )
-    hasOrders = serializers.SerializerMethodField()
+class CarSerializer(serializers.Serializer):
+    id = serializers.UUIDField(read_only=True)
+    brand = serializers.UUIDField(read_only=True)
+    brandName = serializers.CharField(read_only=True)
+    model = serializers.UUIDField(read_only=True)
+    modelName = serializers.CharField(read_only=True)
+    ownerName = serializers.CharField(read_only=True)
+    ownerPhone = serializers.CharField(read_only=True)
+    year = serializers.IntegerField(read_only=True)
+    vin = serializers.CharField(read_only=True, allow_blank=True, allow_null=True)
+    plate_number = serializers.CharField(read_only=True, allow_blank=True, allow_null=True)
+    photo = serializers.CharField(read_only=True, allow_blank=True, allow_null=True)
+    hasOrders = serializers.BooleanField(read_only=True)
     status = serializers.CharField(read_only=True)
+
+
+class CarWriteSerializer(serializers.Serializer):
+    brand = serializers.UUIDField(required=True)
+    model = serializers.UUIDField(required=True)
+    year = serializers.IntegerField(min_value=1886, max_value=date.today().year + 1)
     vin = serializers.CharField(
-        max_length=64,
-        required=False,
-        allow_blank=True,
-        allow_null=True,
-        validators=[],
+        max_length=64, required=False, allow_blank=True, allow_null=True,
     )
-
-    class Meta:
-        model = Car
-        fields = [
-            'id',
-            'brand',
-            'brandName',
-            'model',
-            'modelName',
-            'ownerName',
-            'ownerPhone',
-            'year',
-            'vin',
-            'plate_number',
-            'photo',
-            'hasOrders',
-            'status',
-        ]
-        read_only_fields = [
-            'id',
-            'brandName',
-            'modelName',
-            'ownerName',
-            'ownerPhone',
-            'hasOrders',
-        ]
-
-    def get_ownerName(self, obj):
-        return native_display_name(get_native_profile(obj.owner_id, self.context))
-
-    def get_ownerPhone(self, obj):
-        return get_native_profile(obj.owner_id, self.context)["phone"]
-
-    def get_hasOrders(self, obj):
-        return obj.orders.exists()
-
-    def validate(self, attrs):
-        brand = attrs.get('brand', getattr(self.instance, 'brand', None))
-        model = attrs.get('model', getattr(self.instance, 'model', None))
-
-        if brand and model and model.brand_id != brand.id:
-            raise serializers.ValidationError({
-                'model': 'Выбранная модель не относится к указанной марке.'
-            })
-
-        if self.instance and self.instance.orders.exists():
-            protected_fields = ('brand', 'model', 'year', 'vin')
-
-            changed_fields = [
-                field
-                for field in protected_fields
-                if field in attrs and not self._same_value(
-                    field,
-                    getattr(self.instance, field),
-                    attrs[field],
-                )
-            ]
-
-            if changed_fields:
-                raise serializers.ValidationError({
-                    field: 'Это поле нельзя изменять, потому что у автомобиля уже есть заказы.'
-                    for field in changed_fields
-                })
-
-        return attrs
-
-    @staticmethod
-    def _same_value(field, current, new):
-        if field == 'vin':
-            current = (current or '').strip().upper()
-            new = (new or '').strip().upper()
-
-        return current == new
+    plate_number = serializers.CharField(
+        max_length=20, required=False, allow_blank=True, allow_null=True,
+    )
+    photo = serializers.ImageField(required=False, allow_null=True)
 
     def validate_vin(self, value):
-        if not value:
-            return None
-
-        value = value.strip().upper()
-
-        if not value:
-            return None
-
-        if not re.fullmatch(r'[A-HJ-NPR-Z0-9]{17}', value):
+        value = (value or "").strip().upper()
+        if value and not re.fullmatch(r"[A-HJ-NPR-Z0-9]{17}", value):
             raise serializers.ValidationError(
-                'VIN должен содержать 17 символов: латинские буквы и цифры, без I, O и Q.'
+                "VIN должен содержать 17 символов: латинские буквы и цифры, без I, O и Q."
             )
-
         return value
-
-    @transaction.atomic
-    def create(self, validated_data):
-        owner_id = self.context['request'].user.id
-        car = Car.objects.create(owner_id=owner_id, **validated_data)
-        CarOwnership.objects.create(car=car, owner_id=owner_id)
-        return car
