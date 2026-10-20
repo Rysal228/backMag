@@ -1,3 +1,4 @@
+import base64
 """Vehicle HTTP API facade: 1C owns cars, Django owns auth and order links."""
 from uuid import UUID
 
@@ -145,8 +146,6 @@ class CarViewSet(viewsets.ViewSet):
         result["ownerName"] = native_display_name(owner)
         result["ownerPhone"] = owner["phone"]
         result["hasOrders"] = Order.objects.filter(car_id=car["id"]).exists()
-        # Photos require a separate migration to native 1C storage.
-        result["photo"] = None
         return result
 
     def list(self, request):
@@ -199,10 +198,19 @@ class CarViewSet(viewsets.ViewSet):
         )
 
     @staticmethod
-    def _no_photo(request):
-        # Never silently discard user-supplied photos during transition.
-        if "photo" in request.data and request.data.get("photo") not in (None, ""):
-            raise ValidationError({"photo": "Загрузка фото в 1С пока не подключена."})
+    def _prepare_photo(fields):
+        file = fields.pop("photo", ...)
+        if file is ...:
+            return
+        if file is None:
+            raise ValidationError({"photo": "Очистка фотографии пока не поддерживается."})
+        if file.size > 2 * 1024 * 1024:
+            raise ValidationError({"photo": "Фотография не должна превышать 2 МиБ."})
+        mime = getattr(file, "content_type", None)
+        if mime not in ("image/jpeg", "image/png", "image/webp"):
+            raise ValidationError({"photo": "Допустимые форматы: JPEG, PNG и WebP."})
+        fields["photoBase64"] = base64.b64encode(file.read()).decode("ascii")
+        fields["photoMime"] = mime
 
     @staticmethod
     def _validate_brand_model(data):
@@ -218,10 +226,10 @@ class CarViewSet(viewsets.ViewSet):
     def create(self, request):
         if request.active_role != UserRole.USER:
             raise PermissionDenied("Только пользователь может добавлять автомобили.")
-        self._no_photo(request)
         serializer = CarWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         fields = dict(serializer.validated_data)
+        self._prepare_photo(fields)
         self._validate_brand_model(fields)
         fields["ownerId"] = str(request.user.id)
         for field in ("brand", "model"):
@@ -242,6 +250,7 @@ class CarViewSet(viewsets.ViewSet):
         serializer = CarWriteSerializer(data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         fields = dict(serializer.validated_data)
+        self._prepare_photo(fields)
         if Order.objects.filter(car_id=car["id"]).exists():
             immutable = ("brand", "model", "year", "vin")
             changed = [
