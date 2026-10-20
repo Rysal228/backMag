@@ -90,8 +90,6 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Order.objects.select_related(
-            'car__brand',
-            'car__model',
             'status',
             'work_status',
             'payment_status',
