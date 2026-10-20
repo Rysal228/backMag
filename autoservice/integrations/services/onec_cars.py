@@ -32,12 +32,20 @@ class OneCCarsClient:
         self.path = os.environ.get("ONEC_CARS_PATH", "/ServiceCar/hs/api").strip("/")
         self.user = os.environ.get("ONEC_API_USER")
         self.password = os.environ.get("ONEC_API_PASSWORD")
-        # Vehicles (including VIN and ownership) are sensitive; never use the
-        # old anonymous/internal user-lookup exception for vehicle endpoints.
-        if not self.user or not self.password:
+        # Match OneCUsersClient: the existing local 1C publication may use
+        # the internal network without Basic Auth. Never allow this exception
+        # for a different/custom 1C endpoint.
+        self.allow_internal = self.base == DEFAULT_BASE_URL
+        if bool(self.user) != bool(self.password):
             raise OneCCarError(
-                "onec_cars_credentials_required",
-                "Для доступа к автомобилям нужна сервисная учётная запись 1С.",
+                "onec_credentials_invalid",
+                "Учётные данные интеграции 1С настроены неполностью.",
+                503,
+            )
+        if not self.user and not self.allow_internal:
+            raise OneCCarError(
+                "onec_credentials_missing",
+                "Не настроен защищённый доступ Django к 1С.",
                 503,
             )
 
