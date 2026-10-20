@@ -20,6 +20,53 @@ MODEL = "8449407b-315d-4fa9-b058-2727c43a1b78"
 @patch.dict("os.environ", {"ONEC_API_USER": "test-account", "ONEC_API_PASSWORD": "test-password"})
 class OneCCarsContractTests(SimpleTestCase):
     @patch("integrations.services.onec_cars.requests.request")
+    @patch.dict("os.environ", {
+        "ONEC_BASE_URL": "http://host.docker.internal:8081",
+        "ONEC_API_USER": "",
+        "ONEC_API_PASSWORD": "",
+    })
+    def test_internal_cars_work_without_service_credentials(self, request):
+        request.return_value = SimpleNamespace(
+            ok=True, json=lambda: [{"id": BRAND, "name": "Toyota"}]
+        )
+        records = OneCCarsClient().brands()
+        self.assertEqual(records[0]["id"], BRAND)
+        self.assertIsNone(request.call_args.kwargs["auth"])
+
+    @patch.dict("os.environ", {
+        "ONEC_BASE_URL": "https://external-1c.example.test",
+        "ONEC_API_USER": "",
+        "ONEC_API_PASSWORD": "",
+    })
+    def test_external_1c_requires_credentials(self):
+        with self.assertRaises(OneCCarError) as error:
+            OneCCarsClient()
+        self.assertEqual(error.exception.status_code, 503)
+
+    @patch.dict("os.environ", {
+        "ONEC_BASE_URL": "http://host.docker.internal:8081",
+        "ONEC_API_USER": "half-configured",
+        "ONEC_API_PASSWORD": "",
+    })
+    def test_partial_credentials_are_rejected(self):
+        with self.assertRaises(OneCCarError) as error:
+            OneCCarsClient()
+        self.assertEqual(error.exception.status_code, 503)
+
+    @patch("integrations.services.onec_cars.requests.request")
+    @patch.dict("os.environ", {
+        "ONEC_BASE_URL": "https://external-1c.example.test",
+        "ONEC_API_USER": "service",
+        "ONEC_API_PASSWORD": "secret",
+    })
+    def test_external_1c_preserves_basic_auth(self, request):
+        request.return_value = SimpleNamespace(
+            ok=True, json=lambda: [{"id": BRAND, "name": "Toyota"}]
+        )
+        self.assertEqual(OneCCarsClient().brands()[0]["id"], BRAND)
+        self.assertEqual(request.call_args.kwargs["auth"], ("service", "secret"))
+
+    @patch("integrations.services.onec_cars.requests.request")
     @patch.dict("os.environ", {"ONEC_BASE_URL": "http://host.docker.internal:8081"})
     def test_brands_have_native_uuid(self, request):
         request.return_value = SimpleNamespace(
