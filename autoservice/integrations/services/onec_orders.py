@@ -208,13 +208,60 @@ class OneCOrdersClient:
             )
         return record
 
+    @staticmethod
+    def _check_works(payload):
+        """An order may have no works; a work row must reference the 1C catalog."""
+        if not isinstance(payload, dict):
+            raise OneCOrderError("invalid_payload", "Тело заказа должно быть объектом.", 400)
+        if "workTypes" in payload:
+            raise OneCOrderError(
+                "catalog_works_only",
+                "Передавайте идентификаторы работ из справочника, а не названия.",
+                400,
+            )
+        if "works" not in payload:
+            return
+        works = payload["works"]
+        if not isinstance(works, list):
+            raise OneCOrderError("invalid_works", "Работы должны быть массивом.", 400)
+        seen = set()
+        for work in works:
+            if not isinstance(work, dict):
+                raise OneCOrderError(
+                    "invalid_works", "Каждая работа должна быть объектом.", 400
+                )
+            if set(work) - {"id", "workTypeId", "price"}:
+                raise OneCOrderError(
+                    "catalog_works_only",
+                    "Произвольные названия работ не поддерживаются.",
+                    400,
+                )
+            if not work.get("workTypeId"):
+                raise OneCOrderError(
+                    "work_type_required",
+                    "Для каждой строки выберите вид работы из справочника.",
+                    400,
+                )
+            kind = _uuid(work["workTypeId"])
+            if kind in seen:
+                raise OneCOrderError(
+                    "duplicate_work_type",
+                    "Нельзя выбрать один вид работы дважды.",
+                    400,
+                )
+            seen.add(kind)
+            if work.get("id") is not None:
+                _uuid(work["id"])
+
     def create(self, payload, actor_id, actor_role):
+        self._check_works(payload)
         return self._order(self._request(
             "POST", "orders", actor_id=actor_id, actor_role=actor_role,
             payload=payload,
         ))
 
     def patch(self, order_id, payload, actor_id, actor_role):
+        self._check_works(payload)
         return self._order(self._request(
             "PATCH", f"orders/{self._order_id(order_id)}",
             actor_id=actor_id, actor_role=actor_role, payload=payload,
