@@ -86,7 +86,7 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
             return
 
         user, role, expires_at, method, messenger, max_phone = result
-        room = await self._get_accessible_room(user.pk, role)
+        room = await self._get_accessible_room(user, role)
         if room is None:
             await self._send_error('chat_access_denied', 'Нет доступа к этому чату.')
             await self.close(code=4403)
@@ -119,14 +119,13 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
             return None
 
     @database_sync_to_async
-    def _get_accessible_room(self, user_id, role):
+    def _get_accessible_room(self, user, role):
         room = (
             ChatRoom.objects
-            .select_related('order')
             .filter(pk=self.scope['url_route']['kwargs']['room_id'])
             .first()
         )
-        if room is None or not can_access_room_for(room, self.user, role):
+        if room is None or not can_access_room_for(room, user, role):
             return None
         return room
 
