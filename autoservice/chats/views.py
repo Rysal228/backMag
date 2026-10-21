@@ -86,7 +86,7 @@ class ChatMessagesView(APIView):
 
     def post(self, request, room_id):
         room = get_object_or_404(
-            ChatRoom.objects.select_related('order'),
+            ChatRoom.objects,
             pk=room_id,
         )
         if not can_access_room(room, request):
