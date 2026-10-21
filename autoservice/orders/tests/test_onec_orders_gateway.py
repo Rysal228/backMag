@@ -56,6 +56,57 @@ class OneCOrdersGatewayTests(SimpleTestCase):
         self.assertEqual(request.call_args.kwargs["json"], payload)
         self.assertEqual(request.call_args.kwargs["params"]["actorId"], ACTOR)
 
+    @patch("integrations.services.onec_orders.requests.request")
+    def test_create_allows_no_works(self, request):
+        request.return_value = api_response(order_record(), 201)
+        client = OneCOrdersClient()
+        self.assertEqual(
+            client.create({"car": CAR, "works": []}, ACTOR, "user")["id"],
+            ORDER,
+        )
+        self.assertEqual(request.call_args.kwargs["json"]["works"], [])
+        self.assertEqual(
+            client.patch(ORDER, {"description": "Без работ"}, ACTOR, "user")["id"],
+            ORDER,
+        )
+
+    @patch("integrations.services.onec_orders.requests.request")
+    def test_create_uses_catalog_work_id(self, request):
+        request.return_value = api_response(order_record(), 201)
+        OneCOrdersClient().create(
+            {"car": CAR, "works": [{"workTypeId": STATUS}]},
+            ACTOR, "user",
+        )
+        self.assertEqual(
+            request.call_args.kwargs["json"]["works"][0]["workTypeId"], STATUS
+        )
+
+    @patch("integrations.services.onec_orders.requests.request")
+    def test_free_text_works_are_rejected_before_http(self, request):
+        client = OneCOrdersClient()
+        bad_payloads = (
+            {"workTypes": ["Моя работа"]},
+            {"works": [{"name": "Моя работа", "price": "1.00"}]},
+            {"works": [{"workTypeId": None}]},
+            {"works": [{"workTypeId": STATUS, "name": "Подмена"}]},
+            {"works": [{"workTypeId": STATUS}, {"workTypeId": STATUS}]},
+        )
+        for payload in bad_payloads:
+            with self.subTest(payload=payload):
+                with self.assertRaises(OneCOrderError) as error:
+                    client.create(payload, ACTOR, "user")
+                self.assertEqual(error.exception.status_code, 400)
+        request.assert_not_called()
+
+    def test_status_change_has_no_hardcoded_transition_graph(self):
+        # Order gateway forwards manager's target UUID; 1C validates role,
+        # target catalog entry and current order independently.
+        request_payload = {"statusId": STATUS, "refusalReason": ""}
+        with patch("integrations.services.onec_orders.requests.request") as request:
+            request.return_value = api_response(order_record())
+            OneCOrdersClient().transition_status(ORDER, STATUS, ACTOR, "admin")
+            self.assertEqual(request.call_args.kwargs["json"], request_payload)
+
     def test_bad_role_is_rejected(self):
         with self.assertRaises(OneCOrderError) as error:
             OneCOrdersClient().list_orders(ACTOR, "superuser")
