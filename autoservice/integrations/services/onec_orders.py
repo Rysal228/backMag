@@ -298,12 +298,6 @@ class OneCOrdersClient:
             payload={"statusId": _uuid(status_id)},
         ))
 
-    def filter_permissions(self, actor_id, actor_role):
-        return self._mapping(self._request(
-            "GET", "order-filter-permissions",
-            actor_id=actor_id, actor_role=actor_role,
-        ))
-
     def car_orders(self, car_id, actor_id, actor_role):
         records = self._array(self._request(
             "GET", f"orders/by-car/{self._order_id(car_id)}",
