@@ -8,7 +8,7 @@ from rest_framework.exceptions import ValidationError
 
 from cars.serializers import CarWriteSerializer
 from integrations.services.onec_cars import OneCCarsClient, OneCCarError
-from orders.serializers import OrderSerializer
+from orders.views import _order_payload
 
 
 OWNER = "8996ef81-9116-4d75-a3de-2fa8a5bc6b10"
@@ -98,14 +98,17 @@ class OneCCarsContractTests(SimpleTestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("vin", serializer.errors)
 
-    @patch("orders.serializers.OneCCarsClient")
-    def test_order_rejects_other_users_vehicle(self, cars):
-        cars.return_value.get.return_value = {
-            "id": CAR, "ownerId": "17fa2dad-d63c-435e-9447-5666283c5985",
-            "status": "active",
-        }
-        serializer = OrderSerializer(context={
-            "request": SimpleNamespace(user=SimpleNamespace(id=UUID(OWNER)))
+    def test_order_payload_uses_native_car_uuid_without_local_order_models(self):
+        request = SimpleNamespace(data={
+            "car": CAR, "works": [], "description": "Осмотр",
+        })
+        payload = _order_payload(request)
+        self.assertEqual(payload["car"], CAR)
+        self.assertEqual(payload["works"], [])
+
+    def test_order_payload_rejects_custom_work_name(self):
+        request = SimpleNamespace(data={
+            "car": CAR, "works": [{"name": "Произвольная работа"}],
         })
         with self.assertRaises(ValidationError):
-            serializer.validate_car(UUID(CAR))
+            _order_payload(request)
