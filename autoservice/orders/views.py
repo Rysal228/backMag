@@ -67,6 +67,18 @@ def _order_payload(request):
     return payload
 
 
+def _order_filters(request):
+    validate_filter_permissions(request)
+    permitted = OneCOrdersClient.LIST_FILTERS - {"car"}
+    unknown = set(request.query_params) - permitted - {"page", "page_size", "format"}
+    if unknown:
+        raise ValidationError({
+            key: "Неизвестный параметр фильтра." for key in sorted(unknown)
+        })
+    return {key: request.query_params[key] for key in permitted
+            if request.query_params.get(key) not in (None, "")}
+
+
 def _list_response(records, request, view):
     paginator = OrderPagination()
     page = paginator.paginate_queryset(records, request, view=view)
@@ -133,13 +145,7 @@ class OrderViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def list(self, request):
-        validate_filter_permissions(request)
-        permitted = OneCOrdersClient.LIST_FILTERS - {"car"}
-        unknown = set(request.query_params) - permitted - {"page", "page_size", "format"}
-        if unknown:
-            raise ValidationError({key: "Неизвестный параметр фильтра." for key in sorted(unknown)})
-        filters = {key: request.query_params[key] for key in permitted
-                   if request.query_params.get(key) not in (None, "")}
+        filters = _order_filters(request)
         records = OneCOrdersClient().list_orders(*_actor(request), filters=filters)
         return _list_response(records, request, self)
 
