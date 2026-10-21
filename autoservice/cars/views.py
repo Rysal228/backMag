@@ -2,8 +2,6 @@ import base64
 """Vehicle HTTP API facade: 1C owns cars, Django owns auth and order links."""
 from uuid import UUID
 
-from django.db.models import Q
-from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
@@ -13,11 +11,8 @@ from cars.pagination import CarPagination
 from cars.serializers import CarWriteSerializer, CarSerializer
 from integrations.services.onec_cars import OneCCarsClient, OneCCarError, canonical_uuid
 from integrations.services.onec_users import OneCUsersClient
-from orders.filters import OrderFilter
-from orders.models import Order
-from orders.pagination import OrderPagination
-from orders.permissions import validate_filter_permissions
-from orders.serializers import OrderSerializer
+from integrations.services.onec_orders import OneCOrdersClient
+from orders.views import _actor, _list_response, _order_filters
 from users.auth.services import PhoneNormalizer
 from users.models import UserRole
 from users.onec_lookup import get_native_profile, native_display_name
@@ -74,11 +69,12 @@ class CarViewSet(viewsets.ViewSet):
             return [x for x in records if _same_uuid(x["ownerId"], request.user.id)]
         records = client.list_cars()
         if request.active_role == UserRole.MECHANIC:
+            records_for_role = OneCOrdersClient().list_orders(*_actor(request))
             allowed = {
-                str(x).lower()
-                for x in Order.objects.filter(
-                    mechanic_links__mechanic_id=request.user.id
-                ).values_list("car_id", flat=True)
+                item["car"].lower() for item in records_for_role
+                if str(request.user.id).lower() in {
+                    str(uid).lower() for uid in item.get("mechanics", [])
+                }
             }
             return [x for x in records if x["id"].lower() in allowed]
         if request.active_role == UserRole.ADMIN:
@@ -131,10 +127,13 @@ class CarViewSet(viewsets.ViewSet):
             if not _same_uuid(car["ownerId"], request.user.id):
                 raise NotFound("Автомобиль не найден.")
         elif request.active_role == UserRole.MECHANIC:
-            if not Order.objects.filter(
-                car_id=identifier,
-                mechanic_links__mechanic_id=request.user.id,
-            ).exists():
+            if not any(
+                str(request.user.id).lower() in {
+                    str(uid).lower() for uid in item.get("mechanics", [])
+                } for item in OneCOrdersClient().car_orders(
+                    identifier, *_actor(request)
+                )
+            ):
                 raise NotFound("Автомобиль не найден.")
         elif request.active_role != UserRole.ADMIN:
             raise PermissionDenied("Недопустимая роль.")
@@ -145,7 +144,10 @@ class CarViewSet(viewsets.ViewSet):
         owner = get_native_profile(car["ownerId"], context)
         result["ownerName"] = native_display_name(owner)
         result["ownerPhone"] = owner["phone"]
-        result["hasOrders"] = Order.objects.filter(car_id=car["id"]).exists()
+        request = context["request"]
+        result["hasOrders"] = OneCOrdersClient().car_has_orders(
+            car["id"], *_actor(request)
+        )
         return result
 
     def list(self, request):
@@ -185,17 +187,10 @@ class CarViewSet(viewsets.ViewSet):
     def orders(self, request, pk=None):
         car = self._get_authorized(request, pk)
         validate_filter_permissions(request)
-        orders = Order.objects.filter(
-            car_id=car["id"], customer_id=request.user.id,
-        ).select_related(
-            "status", "work_status", "payment_status", "busy_slot"
-        ).prefetch_related("works__work_type").order_by("-created_at")
-        orders = OrderFilter(request.query_params, queryset=orders, request=request).qs
-        paginator = OrderPagination()
-        page = paginator.paginate_queryset(orders, request, view=self)
-        return paginator.get_paginated_response(
-            OrderSerializer(page, many=True, context={"request": request}).data
+        orders = OneCOrdersClient().car_orders(
+            car["id"], *_actor(request), filters=_order_filters(request)
         )
+        return _list_response(orders, request, self)
 
     @staticmethod
     def _prepare_photo(fields):
@@ -251,7 +246,7 @@ class CarViewSet(viewsets.ViewSet):
         serializer.is_valid(raise_exception=True)
         fields = dict(serializer.validated_data)
         self._prepare_photo(fields)
-        if Order.objects.filter(car_id=car["id"]).exists():
+        if OneCOrdersClient().car_has_orders(car["id"], *_actor(request)):
             immutable = ("brand", "model", "year", "vin")
             changed = [
                 name for name in immutable
