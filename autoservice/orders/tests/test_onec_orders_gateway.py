@@ -141,6 +141,30 @@ class OneCOrdersGatewayTests(SimpleTestCase):
         self.assertEqual(error.exception.status_code, 409)
 
     @patch("integrations.services.onec_orders.requests.request")
+    def test_internal_1c_create_error_exposes_only_safe_event_id(self, request):
+        event_id = "e1554ed0-2508-4dd0-b5c1-8b9e99e83c6f"
+        request.return_value = api_response({
+            "code": "order_create_failed",
+            "message": "Ошибка сохранения заказа в 1С. Код события: " + event_id,
+        }, 500)
+        with self.assertRaises(OneCOrderError) as error:
+            OneCOrdersClient().create({"car": CAR, "works": []}, ACTOR, "user")
+        self.assertEqual(error.exception.status_code, 502)
+        self.assertEqual(str(error.exception.detail),
+                         "Ошибка сохранения заказа в 1С. Код события: " + event_id)
+
+    @patch("integrations.services.onec_orders.requests.request")
+    def test_500_does_not_expose_arbitrary_1c_diagnostics(self, request):
+        request.return_value = api_response({
+            "code": "order_create_failed",
+            "message": "Секретный стек 1С и SQL не должен попадать клиенту",
+        }, 500)
+        with self.assertRaises(OneCOrderError) as error:
+            OneCOrdersClient().create({"car": CAR, "works": []}, ACTOR, "user")
+        self.assertEqual(error.exception.status_code, 502)
+        self.assertNotIn("Секретный", str(error.exception.detail))
+
+    @patch("integrations.services.onec_orders.requests.request")
     def test_rejects_invalid_json(self, request):
         response = api_response({})
         response.json = lambda: (_ for _ in ()).throw(ValueError("invalid"))

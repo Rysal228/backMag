@@ -105,6 +105,25 @@ class OneCOrdersClient:
             ) from exc
 
         if not response.ok:
+            # Only a known 1C error with a validated UUID is exposed to
+            # clients. Other 5xx responses must not leak internal 1C traces.
+            if (
+                response.status_code == 500
+                and isinstance(body, dict)
+                and body.get("code") == "order_create_failed"
+                and isinstance(body.get("message"), str)
+            ):
+                prefix = "Ошибка сохранения заказа в 1С. Код события: "
+                message = body["message"]
+                if message.startswith(prefix):
+                    try:
+                        event_id = str(UUID(message[len(prefix):]))
+                    except (ValueError, TypeError, AttributeError):
+                        pass
+                    else:
+                        raise OneCOrderError(
+                            "onec_order_write_failed", prefix + event_id, 502
+                        )
             if (
                 response.status_code in (400, 403, 404, 409)
                 and isinstance(body, dict)
