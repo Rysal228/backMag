@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from chats.models import ChatAttachment, ChatMessage, ChatRoom
 from chats.permissions import can_access_order_chats, can_access_room
 from chats.serializers import ChatMessageSerializer, ChatRoomSerializer, SendChatMessageSerializer
-from orders.models import Order
+from integrations.services.onec_orders import OneCOrdersClient
 from users.models import UserRole
 
 
@@ -20,10 +20,7 @@ class OrderChatRoomsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, order_id):
-        order = get_object_or_404(
-            Order.objects.prefetch_related('mechanic_links'),
-            pk=order_id,
-        )
+        order = OneCOrdersClient().get(order_id, request.user.id, request.active_role)
         if not can_access_order_chats(order, request):
             raise PermissionDenied('Нет доступа к чатам этого заказа.')
 
@@ -32,29 +29,29 @@ class OrderChatRoomsView(APIView):
 
         if role in (UserRole.USER, UserRole.ADMIN):
             room, _ = ChatRoom.objects.get_or_create(
-                order=order,
+                order_id=order_id,
                 type=ChatRoom.Type.CUSTOMER_MANAGER,
                 defaults={'mechanic_id': None},
             )
             rooms.append(room)
 
         if role == UserRole.ADMIN:
-            for mechanic_id in order.mechanic_ids:
+            for mechanic_id in order.get('mechanics', []):
                 room, _ = ChatRoom.objects.get_or_create(
-                    order=order,
+                    order_id=order_id,
                     type=ChatRoom.Type.MANAGER_MECHANIC,
                     mechanic_id=mechanic_id,
                 )
                 rooms.append(room)
         elif role == UserRole.MECHANIC:
             room, _ = ChatRoom.objects.get_or_create(
-                order=order,
+                order_id=order_id,
                 type=ChatRoom.Type.MANAGER_MECHANIC,
                 mechanic_id=request.user.id,
             )
             rooms.append(room)
 
-        return Response(ChatRoomSerializer(rooms, many=True).data)
+        return Response(ChatRoomSerializer(rooms, many=True, context={'request': request}).data)
 
 
 class ChatMessagesView(APIView):
@@ -62,7 +59,7 @@ class ChatMessagesView(APIView):
 
     def get(self, request, room_id):
         room = get_object_or_404(
-            ChatRoom.objects.select_related('order'),
+            ChatRoom.objects,
             pk=room_id,
         )
         if not can_access_room(room, request):
@@ -89,7 +86,7 @@ class ChatMessagesView(APIView):
 
     def post(self, request, room_id):
         room = get_object_or_404(
-            ChatRoom.objects.select_related('order'),
+            ChatRoom.objects,
             pk=room_id,
         )
         if not can_access_room(room, request):
@@ -130,7 +127,7 @@ class ChatAttachmentDownloadView(APIView):
 
     def get(self, request, attachment_id):
         attachment = get_object_or_404(
-            ChatAttachment.objects.select_related('message__room__order'),
+            ChatAttachment.objects.select_related('message__room'),
             pk=attachment_id,
         )
         if not can_access_room(attachment.message.room, request):

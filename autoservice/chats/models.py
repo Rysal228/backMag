@@ -4,7 +4,6 @@ from django.db import models
 from django.db.models import Q
 
 from chats.storage import PrivateChatAttachmentStorage
-from orders.models import Order
 
 
 class ChatRoom(models.Model):
@@ -13,12 +12,8 @@ class ChatRoom(models.Model):
         MANAGER_MECHANIC = 'manager_mechanic', 'Менеджер — механик'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    order = models.ForeignKey(
-        Order,
-        on_delete=models.CASCADE,
-        related_name='chat_rooms',
-        verbose_name='Заказ',
-    )
+    # Native UUID of 1C Document.ЗаказыНаОбслуживание (no local Order ORM).
+    order_id = models.UUIDField(db_column='order_id', db_index=True, verbose_name='Заказ 1С')
     type = models.CharField(
         max_length=32,
         choices=Type.choices,
@@ -39,12 +34,12 @@ class ChatRoom(models.Model):
                 name='chat_room_type_mechanic_consistency',
             ),
             models.UniqueConstraint(
-                fields=('order',),
+                fields=('order_id',),
                 condition=Q(type='customer_manager'),
                 name='unique_customer_manager_chat_per_order',
             ),
             models.UniqueConstraint(
-                fields=('order', 'mechanic_id'),
+                fields=('order_id', 'mechanic_id'),
                 condition=Q(type='manager_mechanic'),
                 name='unique_manager_mechanic_chat_per_order',
             ),
@@ -52,7 +47,7 @@ class ChatRoom(models.Model):
         ordering = ('created_at',)
 
     def __str__(self):
-        return f'Чат {self.get_type_display()} — заказ №{self.order.order_number}'
+        return f'Чат {self.get_type_display()} — заказ {self.order_id}'
 
 
 class ChatMessage(models.Model):

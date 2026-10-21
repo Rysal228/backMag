@@ -1,4 +1,4 @@
-"""Preparatory 1C order gateway. Not used by existing Django order routes yet.
+"""1C order gateway: Django validates JWT and proxies order operations.
 
 Only 1C will own the order workflow after cutover. The 1C endpoint MUST verify
 actor identity/role against its own application-user catalog/roles register.
@@ -298,10 +298,14 @@ class OneCOrdersClient:
             payload={"statusId": _uuid(status_id)},
         ))
 
-    def car_orders(self, car_id, actor_id, actor_role):
+    def car_orders(self, car_id, actor_id, actor_role, filters=None):
+        filters = filters or {}
+        unknown = set(filters) - (self.LIST_FILTERS - {"car"})
+        if unknown:
+            raise OneCOrderError("invalid_filter", "Неизвестный фильтр заказа.", 400)
         records = self._array(self._request(
             "GET", f"orders/by-car/{self._order_id(car_id)}",
-            actor_id=actor_id, actor_role=actor_role,
+            actor_id=actor_id, actor_role=actor_role, params=filters,
         ))
         return [self._order(item) for item in records]
 

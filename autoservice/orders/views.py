@@ -1,157 +1,202 @@
-from django.db.models import Q
-from rest_framework import permissions, serializers, viewsets
+"""Django HTTP facade: all order records, catalogs and schedule live in 1C."""
+from uuid import UUID
+
+from django.utils import timezone
+from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
-from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.exceptions import MethodNotAllowed, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from orders.models import AppointmentSettings, Order, OrderFilterKey, OrderFilterPermission, ScheduleBlock, WeekdaySchedule, OrderStatus, WorkStatus, WorkType, PaymentStatus
-from orders.filters import OrderFilter
+from integrations.services.onec_orders import OneCOrdersClient
+from orders.models import OrderFilterKey, OrderFilterPermission
 from orders.pagination import OrderPagination
 from orders.permissions import validate_filter_permissions
-from orders.serializers import (
-    AppointmentAvailabilitySerializer,
-    AppointmentScheduleSerializer,
-    OrderSerializer,
-    OrderStatusSerializer,
-    WorkStatusSerializer,
-    WorkTypeSerializer,
-    PaymentStatusSerializer,
-)
-from orders.services.appointment_availability import AppointmentAvailabilityService
-from orders.services.order_workflow import OrderWorkflowService
+from users.models import UserRole
 
 
-class WorkTypeViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = WorkTypeSerializer
+def _actor(request):
+    return request.user.id, request.active_role
+
+
+def _uuid(value, field):
+    try:
+        return str(UUID(str(value)))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ValidationError({field: "Некорректный идентификатор справочника 1С."}) from exc
+
+
+def _order_payload(request):
+    """Do not forward unknown or server-owned fields to the authoritative 1C API."""
+    if not isinstance(request.data, dict):
+        raise ValidationError("Ожидается JSON-объект заказа.")
+    writable = {"car", "appointmentAt", "description", "works", "mechanics"}
+    forbidden = set(request.data) - writable
+    if forbidden:
+        raise ValidationError({key: "Недоступное поле заказа." for key in sorted(forbidden)})
+    payload = dict(request.data)
+    if "car" in payload:
+        payload["car"] = _uuid(payload["car"], "car")
+    if "appointmentAt" in payload:
+        value = serializers.DateTimeField().run_validation(payload["appointmentAt"])
+        # 1C uses local workshop +07, not Django's UTC storage representation.
+        payload["appointmentAt"] = timezone.localtime(value).isoformat(timespec="seconds")
+    if "description" in payload:
+        payload["description"] = serializers.CharField(allow_blank=True).run_validation(
+            payload["description"]
+        )
+    if "mechanics" in payload:
+        if not isinstance(payload["mechanics"], list):
+            raise ValidationError({"mechanics": "Ожидается список специалистов."})
+        payload["mechanics"] = [_uuid(x, "mechanics") for x in payload["mechanics"]]
+    if "works" in payload:
+        if not isinstance(payload["works"], list):
+            raise ValidationError({"works": "Ожидается список работ."})
+        result = []
+        for work in payload["works"]:
+            if not isinstance(work, dict) or set(work) - {"id", "workTypeId", "price"}:
+                raise ValidationError({"works": "Разрешён только выбор вида работ из 1С."})
+            prepared = {"workTypeId": _uuid(work.get("workTypeId"), "workTypeId")}
+            if "id" in work and work["id"] is not None:
+                prepared["id"] = _uuid(work["id"], "id")
+            if "price" in work:
+                prepared["price"] = str(serializers.DecimalField(max_digits=12, decimal_places=2,
+                        min_value=0).run_validation(work["price"]))
+            result.append(prepared)
+        payload["works"] = result
+    return payload
+
+
+def _order_filters(request):
+    validate_filter_permissions(request)
+    permitted = OneCOrdersClient.LIST_FILTERS - {"car"}
+    unknown = set(request.query_params) - permitted - {"page", "page_size", "format"}
+    if unknown:
+        raise ValidationError({
+            key: "Неизвестный параметр фильтра." for key in sorted(unknown)
+        })
+    return {key: request.query_params[key] for key in permitted
+            if request.query_params.get(key) not in (None, "")}
+
+
+def _list_response(records, request, view):
+    paginator = OrderPagination()
+    page = paginator.paginate_queryset(records, request, view=view)
+    return paginator.get_paginated_response(page)
+
+
+class _CatalogViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
+    catalog_method = None
 
-    def get_queryset(self):
-        queryset = WorkType.objects.all().order_by('name')
-        search = self.request.query_params.get('search', '').strip()
+    def list(self, request):
+        client = OneCOrdersClient()
+        if self.catalog_method == "work_types":
+            data = client.work_types(*_actor(request), search=request.query_params.get("search", ""))
+        else:
+            data = getattr(client, self.catalog_method)(*_actor(request))
+        return Response(data)
 
-        if search:
-            queryset = queryset.filter(name__icontains=search)
-
-        return queryset
-
-
-class OrderStatusViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = OrderStatus.objects.all().order_by('id')
-    serializer_class = OrderStatusSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-
-class WorkStatusViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = WorkStatus.objects.all().order_by('id')
-    serializer_class = WorkStatusSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    def retrieve(self, request, pk=None):
+        identifier = _uuid(pk, "id")
+        client = OneCOrdersClient()
+        records = (client.work_types(*_actor(request))
+                   if self.catalog_method == "work_types"
+                   else getattr(client, self.catalog_method)(*_actor(request)))
+        record = next((x for x in records if x.get("id") == identifier), None)
+        if record is None:
+            from rest_framework.exceptions import NotFound
+            raise NotFound("Элемент справочника не найден.")
+        return Response(record)
 
 
-class PaymentStatusViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = PaymentStatus.objects.all().order_by('id')
-    serializer_class = PaymentStatusSerializer
-    permission_classes = [permissions.IsAuthenticated]
+class WorkTypeViewSet(_CatalogViewSet):
+    catalog_method = "work_types"
+
+
+class OrderStatusViewSet(_CatalogViewSet):
+    catalog_method = "order_statuses"
+
+
+class WorkStatusViewSet(_CatalogViewSet):
+    catalog_method = "work_statuses"
+
+
+class PaymentStatusViewSet(_CatalogViewSet):
+    catalog_method = "payment_statuses"
 
 
 class AppointmentScheduleView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        settings = AppointmentSettings.objects.first()
-        if settings is None:
-            settings = AppointmentSettings.objects.create()
-
-        data = {
-            'settings': settings,
-            'weekdays': WeekdaySchedule.objects.all(),
-            'blocks': ScheduleBlock.objects.all(),
-        }
-
-        return Response(AppointmentScheduleSerializer(data).data)
+        return Response(OneCOrdersClient().schedule(*_actor(request)))
 
 
 class AppointmentAvailabilityView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        target_date = serializers.DateField().to_internal_value(request.query_params.get('date', ''))
-        availability = AppointmentAvailabilityService.get_availability(target_date)
-
-        return Response(AppointmentAvailabilitySerializer(availability).data)
+        day = serializers.DateField().run_validation(request.query_params.get("date"))
+        return Response(OneCOrdersClient().availability(*_actor(request), day))
 
 
-class OrderViewSet(viewsets.ModelViewSet):
-    serializer_class = OrderSerializer
+class OrderViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
-    pagination_class = OrderPagination
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = OrderFilter
 
-    def get_queryset(self):
-        queryset = Order.objects.select_related(
-            'status',
-            'work_status',
-            'payment_status',
-        ).prefetch_related('works__work_type', 'mechanic_links')
+    def list(self, request):
+        filters = _order_filters(request)
+        records = OneCOrdersClient().list_orders(*_actor(request), filters=filters)
+        return _list_response(records, request, self)
 
-        if self.request.active_role in ('mechanic', 'admin'):
-            return queryset.order_by('-created_at')
+    def retrieve(self, request, pk=None):
+        return Response(OneCOrdersClient().get(pk, *_actor(request)))
 
-        return queryset.filter(customer_id=self.request.user.id).order_by('-created_at')
+    def create(self, request):
+        data = OneCOrdersClient().create(_order_payload(request), *_actor(request))
+        return Response(data, status=status.HTTP_201_CREATED)
 
-    def filter_queryset(self, queryset):
-        validate_filter_permissions(self.request)
-        return super().filter_queryset(queryset)
+    def update(self, request, pk=None):
+        return Response(OneCOrdersClient().patch(pk, _order_payload(request), *_actor(request)))
 
-    @action(detail=True, methods=['get'], url_path='permissions')
+    def partial_update(self, request, pk=None):
+        return Response(OneCOrdersClient().patch(pk, _order_payload(request), *_actor(request)))
+
+    def destroy(self, request, pk=None):
+        # 1C is the sole order owner; do not silently delete its documents.
+        raise MethodNotAllowed("DELETE", detail="Удаление заказов через API не поддерживается.")
+
+    @action(detail=True, methods=["get"], url_path="permissions")
     def permissions(self, request, pk=None):
-        order = self.get_object()
-        return Response(OrderWorkflowService.permissions(order, request))
+        return Response(OneCOrdersClient().permissions(pk, *_actor(request)))
 
-    @action(detail=True, methods=['post'], url_path='transition-status')
+    @action(detail=True, methods=["post"], url_path="transition-status")
     def transition_status(self, request, pk=None):
-        order = self.get_object()
-        status_id = request.data.get('statusId')
-        status = OrderStatus.objects.filter(pk=status_id).first()
-        if status is None:
-            raise serializers.ValidationError({'statusId': 'Статус заказа не найден.'})
-        refusal_reason = request.data.get('refusalReason', '')
-        if refusal_reason is None:
-            refusal_reason = ''
-        if not isinstance(refusal_reason, str):
-            raise serializers.ValidationError({'refusalReason': 'Причина отказа должна быть текстом.'})
-        OrderWorkflowService.transition_status(order, request, status, refusal_reason=refusal_reason)
-        return Response(self.get_serializer(order).data)
+        status_id = _uuid(request.data.get("statusId"), "statusId")
+        reason = request.data.get("refusalReason", "")
+        if not isinstance(reason, str):
+            raise ValidationError({"refusalReason": "Причина отказа должна быть строкой."})
+        return Response(OneCOrdersClient().transition_status(
+            pk, status_id, *_actor(request), refusal_reason=reason
+        ))
 
-    @action(detail=True, methods=['post'], url_path='transition-work-status')
+    @action(detail=True, methods=["post"], url_path="transition-work-status")
     def transition_work_status(self, request, pk=None):
-        order = self.get_object()
-        status_id = request.data.get('statusId')
-        status = WorkStatus.objects.filter(pk=status_id).first()
-        if status is None:
-            raise serializers.ValidationError({'statusId': 'Статус работы не найден.'})
-        OrderWorkflowService.transition_work_status(order, request, status)
-        return Response(self.get_serializer(order).data)
+        return Response(OneCOrdersClient().transition_work_status(
+            pk, _uuid(request.data.get("statusId"), "statusId"), *_actor(request)
+        ))
 
-    @action(detail=True, methods=['post'], url_path='payment-status')
+    @action(detail=True, methods=["post"], url_path="payment-status")
     def payment_status(self, request, pk=None):
-        order = self.get_object()
-        status_id = request.data.get('statusId')
-        status = PaymentStatus.objects.filter(pk=status_id).first()
-        if status is None:
-            raise serializers.ValidationError({'statusId': 'Статус оплаты не найден.'})
-        OrderWorkflowService.set_payment_status(order, request, status)
-        return Response(self.get_serializer(order).data)
+        return Response(OneCOrdersClient().set_payment_status(
+            pk, _uuid(request.data.get("statusId"), "statusId"), *_actor(request)
+        ))
 
-    @action(detail=False, methods=['get'], url_path='filter-permissions')
+    @action(detail=False, methods=["get"], url_path="filter-permissions")
     def filter_permissions(self, request):
-        permissions_map = {key: False for key, _ in OrderFilterKey.choices}
-
-        for filter_permission in OrderFilterPermission.objects.filter(
-            role=request.active_role,
-            enabled=True,
-        ):
-            permissions_map[filter_permission.filter_key] = True
-
-        return Response(permissions_map)
+        allowed = {
+            entry.filter_key for entry in OrderFilterPermission.objects.filter(
+                role=request.active_role, enabled=True
+            )
+        }
+        return Response({key: key in allowed for key, _ in OrderFilterKey.choices})

@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from chats.models import ChatAttachment, ChatMessage, ChatRoom
 from users.onec_lookup import get_native_profile, native_display_name
+from integrations.services.onec_orders import OneCOrdersClient
 
 
 MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024
@@ -48,7 +49,7 @@ class ChatMessageSerializer(serializers.ModelSerializer):
 
 class ChatRoomSerializer(serializers.ModelSerializer):
     orderId = serializers.UUIDField(source='order_id', read_only=True)
-    orderNumber = serializers.CharField(source='order.order_number', read_only=True)
+    orderNumber = serializers.SerializerMethodField()
     mechanicId = serializers.UUIDField(source='mechanic_id', read_only=True, allow_null=True)
     mechanicName = serializers.SerializerMethodField()
     typeLabel = serializers.CharField(source='get_type_display', read_only=True)
@@ -62,6 +63,18 @@ class ChatRoomSerializer(serializers.ModelSerializer):
             'mechanicId', 'mechanicName', 'createdAt', 'lastMessage',
         )
         read_only_fields = fields
+
+    def get_orderNumber(self, obj):
+        request = self.context.get("request")
+        if request is None:
+            return str(obj.order_id)
+        cache = self.context.setdefault("_onec_order_cache", {})
+        key = str(obj.order_id)
+        if key not in cache:
+            cache[key] = OneCOrdersClient().get(
+                obj.order_id, request.user.id, request.active_role
+            )
+        return cache[key]["orderNumber"]
 
     def get_mechanicName(self, obj):
         if not obj.mechanic_id:
