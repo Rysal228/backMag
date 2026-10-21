@@ -19,9 +19,17 @@
 ## Контракт
 - `actor_id` — только из проверенного Django JWT. `actor_role` — только из `request.active_role`; библиотека запрещает другие значения и не позволяет фильтрами переписать `actorId` / `actorRole`.
 - Оба параметра передаются в **query** (`actorId`, `actorRole`) для всех методов. При реальном cutover 1С **должна перепроверять** пользователя, его активность и право роли через собственные данные, а не просто принимать значение query.
-- Методы: `work_types`, `order_statuses`, `work_statuses`, `payment_statuses`, `schedule`, `availability`, `list_orders`, `get`, `create`, `patch`, `permissions`, `transition_status`, `transition_work_status`, `set_payment_status`, `filter_permissions`, `car_orders`, `car_has_orders`.
+- Методы: `work_types`, `order_statuses`, `work_statuses`, `payment_statuses`, `schedule`, `availability`, `list_orders`, `get`, `create`, `patch`, `permissions`, `transition_status`, `transition_work_status`, `set_payment_status`, `car_orders`, `car_has_orders`.
 - Все ID заказов, авто, работ и статусов после cutover — **нативные UUID 1С**. Сохранять внешние URL `/api/v1/orders/`, `/api/v1/cars/{id}/orders/`, но для фронта надо обновить ожидаемые типы ID.
 - HTTP-ошибки с валидным JSON `{code,message}` для 400/403/404/409 передаются наружу; другие ошибки обобщаются. Нет ложного «успеха» при таймаутах и недоступности 1С.
+
+## Фильтры: ответственность Angular + Django, не 1С
+
+Существующие `orders.models.OrderFilterPermission` и `OrderFilterKey` **оставить в PostgreSQL и Django Admin**. Внешний endpoint `GET /api/v1/orders/filter-permissions/` продолжает возвращать настройки по активной роли для отображения в Angular. При cutover **не удалять** модель/миграции/админку фильтров вместе с моделями заказов.
+
+`orders.permissions.validate_filter_permissions(request)` продолжает **серверно запрещать** неразрешённые query-параметры; одного скрытия контролов в Angular недостаточно. После такой проверки Django передаёт в 1С только разрешённые параметры выборки. При этом 1С обязана независимо проверять право инициатора читать конкретные заказы — доступность UI-фильтра сама по себе не даёт доступа к данным.
+
+Регистр 1С `ДоступКФильтрамЗаказов` **не создавать**, в `OneCOrdersClient` **нет** HTTP-метода `filter_permissions`. Этот конфигурационный аспект остаётся в Django, а вся бизнес-логика заказов переносится в 1С.
 
 ## Зависимости для следующего PR cutover
 
