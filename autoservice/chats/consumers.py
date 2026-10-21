@@ -148,7 +148,6 @@ class OrderChatConsumer(AsyncJsonWebsocketConsumer):
             return False
         room = (
             ChatRoom.objects
-            .select_related('order')
             .filter(pk=self.room.pk)
             .first()
         )
