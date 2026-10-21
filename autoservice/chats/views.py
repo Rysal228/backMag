@@ -38,14 +38,14 @@ class OrderChatRoomsView(APIView):
         if role == UserRole.ADMIN:
             for mechanic_id in order.get('mechanics', []):
                 room, _ = ChatRoom.objects.get_or_create(
-                    order=order,
+                    order_id=order_id,
                     type=ChatRoom.Type.MANAGER_MECHANIC,
                     mechanic_id=mechanic_id,
                 )
                 rooms.append(room)
         elif role == UserRole.MECHANIC:
             room, _ = ChatRoom.objects.get_or_create(
-                order=order,
+                order_id=order_id,
                 type=ChatRoom.Type.MANAGER_MECHANIC,
                 mechanic_id=request.user.id,
             )
