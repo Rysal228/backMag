@@ -13,7 +13,7 @@ class ChatRoom(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # Native UUID of 1C Document.ЗаказыНаОбслуживание (no local Order ORM).
-    order_id = models.UUIDField(db_index=True, verbose_name='Заказ 1С')
+    order_id = models.UUIDField(db_column='order_id', db_index=True, verbose_name='Заказ 1С')
     type = models.CharField(
         max_length=32,
         choices=Type.choices,
