@@ -253,7 +253,7 @@ class OneCOrdersClient:
 
     def filter_permissions(self, actor_id, actor_role):
         return self._mapping(self._request(
-            "GET", "orders/filter-permissions",
+            "GET", "order-filter-permissions",
             actor_id=actor_id, actor_role=actor_role,
         ))
 
