@@ -229,3 +229,20 @@ class StatisticsPeriodOptionModelTests(TestCase):
         StatisticsPeriodOption.objects.create(days=14, enabled=True)
         StatisticsPeriodOption.objects.create(days=60, enabled=True)
         self.assertEqual(_statistics_default(_statistics_periods()), 14)
+
+    @patch("orders.views.OneCOrdersClient")
+    def test_disabled_statistics_period_cannot_be_requested(self, gateway):
+        StatisticsPeriodOption.objects.create(days=14, enabled=False)
+        StatisticsPeriodOption.objects.create(days=30, enabled=True, is_default=True)
+
+        with self.assertRaises(ValidationError):
+            OrderStatisticsView().get(actor(role="admin", params={"days": "14"}))
+        gateway.assert_not_called()
+
+    def test_database_query_ignores_periods_beyond_1c_limit(self):
+        from orders.views import _statistics_periods
+
+        StatisticsPeriodOption.objects.create(days=14, enabled=True, is_default=True)
+        # Bypasses form validators to simulate a malformed database/import.
+        StatisticsPeriodOption.objects.create(days=91, enabled=True)
+        self.assertEqual([item["days"] for item in _statistics_periods()], [14])
