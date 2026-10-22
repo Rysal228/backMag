@@ -1,11 +1,14 @@
 """Contract tests: 1C supplies IDs; never read vehicle Django tables."""
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import UUID
 
 from cars.views import CarViewSet
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase
+from PIL import Image
 from rest_framework.exceptions import ValidationError
 
 from cars.serializers import CarWriteSerializer
@@ -170,3 +173,44 @@ class OneCCarsContractTests(SimpleTestCase):
             CAR, {"plate_number": "A550B4"},
         )
 
+
+    @patch.object(CarViewSet, "_validate_brand_model")
+    @patch.object(CarViewSet, "_decorate")
+    @patch.object(CarViewSet, "_get_authorized")
+    @patch("cars.views.OneCCarsClient")
+    @patch("cars.views.OneCOrdersClient")
+    def test_patch_image_is_transformed_to_base64_for_1c(
+        self, orders_gateway, cars_gateway, get_car, decorate, validate_brand_model,
+    ):
+        car = {
+            "id": CAR, "status": "active", "ownerId": OWNER,
+            "brand": BRAND, "model": MODEL, "year": 2025,
+            "vin": "", "plate_number": "",
+        }
+        get_car.return_value = car
+        orders_gateway.return_value.car_has_orders.return_value = True
+        cars_gateway.return_value.patch.return_value = car
+        decorate.side_effect = lambda item, context: item
+        buffer = BytesIO()
+        Image.new("RGB", (2, 2)).save(buffer, format="PNG")
+        picture = SimpleUploadedFile(
+            "car.png", buffer.getvalue(), content_type="image/png",
+        )
+        request = SimpleNamespace(
+            user=SimpleNamespace(id=UUID(OWNER), pk=UUID(OWNER)),
+            active_role="user",
+            data={"photo": picture, "plate_number": "A550B4"},
+        )
+
+        CarViewSet().partial_update(request, pk=CAR)
+
+        kwargs = cars_gateway.return_value.patch.call_args
+        self.assertEqual(kwargs.args[0], CAR)
+        self.assertEqual(kwargs.args[1]["plate_number"], "A550B4")
+        self.assertEqual(kwargs.args[1]["photoMime"], "image/png")
+        import base64
+        self.assertEqual(
+            base64.b64decode(kwargs.args[1]["photoBase64"]),
+            buffer.getvalue(),
+        )
+        self.assertNotIn("photo", kwargs.args[1])
