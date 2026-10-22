@@ -68,7 +68,7 @@ class OneCOrdersClient:
     def _order_id(value):
         return quote(_uuid(value), safe="")
 
-    def _request(self, method, resource, *, actor_id, actor_role, params=None, payload=None):
+    def _request(self, method, resource, *, actor_id, actor_role, params=None, payload=None, timeout=10):
         if not resource or any(s in resource for s in ("?", "#", "..", "//")):
             raise ValueError("Invalid 1C API resource path")
 
@@ -87,7 +87,7 @@ class OneCOrdersClient:
                 json=payload,
                 auth=(self.user, self.password) if self.user else None,
                 headers={"Accept": "application/json"},
-                timeout=10,
+                timeout=timeout,
                 allow_redirects=False,
             )
         except requests.Timeout as exc:
@@ -208,6 +208,7 @@ class OneCOrdersClient:
         result = self._request(
             "GET", "orders/statistics", actor_id=actor_id, actor_role=actor_role,
             params={"from": start_date.isoformat(), "to": end_date.isoformat()},
+            timeout=30,
         )
         if not isinstance(result, dict):
             raise OneCOrderError("invalid_response", "1С вернула некорректную статистику.")
