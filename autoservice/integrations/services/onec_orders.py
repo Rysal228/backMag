@@ -206,7 +206,7 @@ class OneCOrdersClient:
     def statistics(self, actor_id, actor_role, start_date, end_date):
         """Fetch manager-only aggregates from native 1C; never export all orders."""
         result = self._request(
-            "GET", "orders/statistics", actor_id=actor_id, actor_role=actor_role,
+            "GET", "statistics/orders", actor_id=actor_id, actor_role=actor_role,
             params={"from": start_date.isoformat(), "to": end_date.isoformat()},
             timeout=30,
         )
