@@ -145,7 +145,7 @@ class AppointmentAvailabilityView(APIView):
 def _statistics_periods():
     """Only Django configures period choices; 1C accepts 1–90 inclusive days."""
     return list(
-        StatisticsPeriodOption.objects.filter(enabled=True)
+        StatisticsPeriodOption.objects.filter(enabled=True, days__gte=1, days__lte=90)
         .order_by("days")
         .values("days", "is_default")
     )
