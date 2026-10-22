@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from integrations.services.onec_orders import OneCOrdersClient
-from orders.models import OrderFilterKey, OrderFilterPermission
+from orders.models import OrderFilterKey, OrderFilterPermission, StatisticsPeriodOption
 from orders.pagination import OrderPagination
 from orders.permissions import validate_filter_permissions
 from users.models import UserRole
@@ -142,23 +142,63 @@ class AppointmentAvailabilityView(APIView):
         return Response(OneCOrdersClient().availability(*_actor(request), day))
 
 
-class OrderStatisticsView(APIView):
-    """Dashboard data: only for the active manager role, authoritative in 1C."""
+def _statistics_periods():
+    """Only Django configures period choices; 1C accepts 1–90 inclusive days."""
+    return list(
+        StatisticsPeriodOption.objects.filter(enabled=True, days__gte=1, days__lte=90)
+        .order_by("days")
+        .values("days", "is_default")
+    )
+
+
+def _statistics_default(periods):
+    return next(
+        (item["days"] for item in periods if item["is_default"]),
+        periods[0]["days"] if periods else None,
+    )
+
+
+def _check_statistics_manager(request):
+    if request.active_role != UserRole.ADMIN:
+        raise PermissionDenied("Статистика доступна только менеджеру.")
+
+
+class OrderStatisticsPeriodsView(APIView):
+    """Return Django Admin-configured options without contacting 1C."""
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        if request.active_role != UserRole.ADMIN:
-            raise PermissionDenied("Статистика доступна только менеджеру.")
+        _check_statistics_manager(request)
+        periods = _statistics_periods()
+        return Response({
+            "periods": [{"days": item["days"]} for item in periods],
+            "defaultDays": _statistics_default(periods),
+        })
 
-        days = request.query_params.get("days", "30")
-        if days not in ("7", "30", "90") or set(request.query_params) - {"days", "format"}:
-            raise ValidationError({"days": "Допустимые периоды: 7, 30 или 90 дней."})
+
+class OrderStatisticsView(APIView):
+    """Manager-only dashboard; calculations are authoritative in 1C."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        _check_statistics_manager(request)
+
+        periods = _statistics_periods()
+        default_days = _statistics_default(periods)
+        if default_days is None:
+            raise ValidationError({"days": "В Django не настроены доступные периоды статистики."})
+
+        days = request.query_params.get("days", str(default_days))
+        allowed = {str(item["days"]) for item in periods}
+        if days not in allowed or set(request.query_params) - {"days", "format"}:
+            raise ValidationError({
+                "days": "Выберите период из списка доступных в настройках Django.",
+            })
 
         today = timezone.localdate()
         from_date = today - timedelta(days=int(days) - 1)
         data = OneCOrdersClient().statistics(*_actor(request), from_date, today)
         return Response(data)
-
 
 class OrderViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]

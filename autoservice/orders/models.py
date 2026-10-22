@@ -2,6 +2,8 @@
 
 Orders, statuses, works, payments and booking records are native 1C data.
 """
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from users.models import UserRole
 
@@ -44,3 +46,44 @@ class OrderFilterPermission(models.Model):
 
     def __str__(self):
         return f'{self.get_role_display()}: {self.get_filter_key_display()}'
+
+
+class StatisticsPeriodOption(models.Model):
+    """Django-managed choices shown on the manager statistics page.
+
+    The 1C statistics endpoint supports a maximum of 90 inclusive days.
+    No order/appointment data is stored in this table.
+    """
+
+    days = models.PositiveSmallIntegerField(
+        verbose_name="Длительность, дней",
+        unique=True,
+        validators=[MinValueValidator(1), MaxValueValidator(90)],
+        help_text="От 1 до 90 дней. Более длинный период не поддерживается 1С.",
+    )
+    enabled = models.BooleanField(verbose_name="Показывать в статистике", default=True)
+    is_default = models.BooleanField(
+        verbose_name="По умолчанию", default=False,
+        help_text="Только один период может быть выбран по умолчанию.",
+    )
+
+    class Meta:
+        ordering = ("days",)
+        verbose_name = "Период статистики"
+        verbose_name_plural = "Периоды статистики"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("is_default",),
+                condition=models.Q(is_default=True),
+                name="single_statistics_default_period",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.is_default and not self.enabled:
+            # Non-field error: Django Admin's list-editable form excludes is_default.
+            raise ValidationError("Период по умолчанию должен быть включён.")
+
+    def __str__(self):
+        return f"{self.days} дн." + (" (по умолчанию)" if self.is_default else "")
