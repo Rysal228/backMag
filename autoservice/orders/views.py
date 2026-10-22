@@ -1,10 +1,11 @@
 """Django HTTP facade: all order records, catalogs and schedule live in 1C."""
+from datetime import timedelta
 from uuid import UUID
 
 from django.utils import timezone
 from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import MethodNotAllowed, ValidationError
+from rest_framework.exceptions import MethodNotAllowed, PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -139,6 +140,24 @@ class AppointmentAvailabilityView(APIView):
     def get(self, request):
         day = serializers.DateField().run_validation(request.query_params.get("date"))
         return Response(OneCOrdersClient().availability(*_actor(request), day))
+
+
+class OrderStatisticsView(APIView):
+    """Dashboard data: only for the active manager role, authoritative in 1C."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        if request.active_role != UserRole.ADMIN:
+            raise PermissionDenied("Статистика доступна только менеджеру.")
+
+        days = request.query_params.get("days", "30")
+        if days not in ("7", "30", "90") or set(request.query_params) - {"days", "format"}:
+            raise ValidationError({"days": "Допустимые периоды: 7, 30 или 90 дней."})
+
+        today = timezone.localdate()
+        from_date = today - timedelta(days=int(days) - 1)
+        data = OneCOrdersClient().statistics(*_actor(request), from_date, today)
+        return Response(data)
 
 
 class OrderViewSet(viewsets.ViewSet):

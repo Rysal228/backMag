@@ -1,4 +1,5 @@
 """Offline contract tests for the *inactive* 1C orders gateway (no DB/1C needed)."""
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -211,3 +212,32 @@ class OneCOrdersGatewayTests(SimpleTestCase):
         self.assertEqual(
             request.call_args.kwargs["auth"], ("integration", "secret")
         )
+
+
+    @patch("integrations.services.onec_orders.requests.request")
+    def test_statistics_proxies_manager_context_and_dates(self, request):
+        payload = {
+            "period": {"from": "2026-10-01", "to": "2026-10-22", "days": 22},
+            "summary": {"orders": 0, "completed": 0, "workAmount": 0, "occupancyPercent": 0},
+            "ordersTrend": [], "statusDistribution": [],
+            "topWorkTypes": [], "weekdayOccupancy": [],
+        }
+        request.return_value = api_response(payload)
+        result = OneCOrdersClient().statistics(
+            ACTOR, "admin", date(2026, 10, 1), date(2026, 10, 22)
+        )
+        self.assertEqual(result["summary"]["orders"], 0)
+        self.assertIn("/orders/statistics", request.call_args.args[1])
+        self.assertEqual(request.call_args.kwargs["params"]["from"], "2026-10-01")
+        self.assertEqual(request.call_args.kwargs["params"]["to"], "2026-10-22")
+        self.assertEqual(request.call_args.kwargs["params"]["actorRole"], "admin")
+        self.assertEqual(request.call_args.kwargs["timeout"], 30)
+
+    @patch("integrations.services.onec_orders.requests.request")
+    def test_statistics_rejects_incomplete_response(self, request):
+        request.return_value = api_response({"summary": {"orders": 0}})
+        with self.assertRaises(OneCOrderError):
+            OneCOrdersClient().statistics(
+                ACTOR, "admin", date(2026, 10, 1), date(2026, 10, 22)
+            )
+

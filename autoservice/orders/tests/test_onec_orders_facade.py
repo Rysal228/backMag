@@ -1,13 +1,14 @@
 """Offline facade tests: no Order ORM, only one 1C gateway for data."""
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import UUID
 
 from django.test import SimpleTestCase
-from rest_framework.exceptions import MethodNotAllowed, ValidationError
+from rest_framework.exceptions import MethodNotAllowed, PermissionDenied, ValidationError
 
 from orders.views import (
-    OrderViewSet, WorkTypeViewSet, AppointmentAvailabilityView,
+    OrderViewSet, WorkTypeViewSet, AppointmentAvailabilityView, OrderStatisticsView,
     _order_payload,
 )
 from chats.models import ChatRoom
@@ -102,6 +103,27 @@ class OrdersFacadeTests(SimpleTestCase):
     def test_delete_explicitly_forbidden(self):
         with self.assertRaises(MethodNotAllowed):
             OrderViewSet().destroy(actor(), pk=ORDER)
+
+    @patch("orders.views.timezone.localdate", return_value=date(2026, 10, 22))
+    @patch("orders.views.OneCOrdersClient")
+    def test_statistics_gateway_receives_bounded_period(self, gateway, today):
+        gateway.return_value.statistics.return_value = {"summary": {"orders": 0}}
+        result = OrderStatisticsView().get(actor(role="admin", params={"days": "30"}))
+        self.assertEqual(result.data["summary"]["orders"], 0)
+        gateway.return_value.statistics.assert_called_once_with(
+            ACTOR, "admin", date(2026, 9, 23), date(2026, 10, 22)
+        )
+
+    @patch("orders.views.OneCOrdersClient")
+    def test_statistics_rejects_non_manager(self, gateway):
+        with self.assertRaises(PermissionDenied):
+            OrderStatisticsView().get(actor(role="mechanic", params={"days": "30"}))
+        gateway.assert_not_called()
+
+    def test_statistics_rejects_oversized_period(self):
+        with self.assertRaises(ValidationError):
+            OrderStatisticsView().get(actor(role="admin", params={"days": "365"}))
+
 
 
 class ChatGatewayPermissionsTests(SimpleTestCase):
