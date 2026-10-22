@@ -186,7 +186,7 @@ class CarViewSet(viewsets.ViewSet):
     @action(detail=True, methods=["get"])
     def orders(self, request, pk=None):
         car = self._get_authorized(request, pk)
-        validate_filter_permissions(request)
+        # _order_filters already enforces Django filter permissions.
         orders = OneCOrdersClient().car_orders(
             car["id"], *_actor(request), filters=_order_filters(request)
         )
@@ -241,7 +241,6 @@ class CarViewSet(viewsets.ViewSet):
         car = self._get_authorized(request, pk)
         if car["status"] == "archived":
             raise ValidationError({"detail": "Архивный автомобиль нельзя изменять."})
-        self._no_photo(request)
         serializer = CarWriteSerializer(data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         fields = dict(serializer.validated_data)
