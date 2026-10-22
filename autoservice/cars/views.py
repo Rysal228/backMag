@@ -199,8 +199,8 @@ class CarViewSet(viewsets.ViewSet):
             return
         if file is None:
             raise ValidationError({"photo": "Очистка фотографии пока не поддерживается."})
-        if file.size > 2 * 1024 * 1024:
-            raise ValidationError({"photo": "Фотография не должна превышать 2 МиБ."})
+        if file.size > 5_000_000:
+            raise ValidationError({"photo": "Фотография не должна превышать 5 МБ."})
         mime = getattr(file, "content_type", None)
         if mime not in ("image/jpeg", "image/png", "image/webp"):
             raise ValidationError({"photo": "Допустимые форматы: JPEG, PNG и WebP."})
