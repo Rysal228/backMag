@@ -227,7 +227,7 @@ class OneCOrdersGatewayTests(SimpleTestCase):
             ACTOR, "admin", date(2026, 10, 1), date(2026, 10, 22)
         )
         self.assertEqual(result["summary"]["orders"], 0)
-        self.assertIn("/orders/statistics", request.call_args.args[1])
+        self.assertIn("/statistics/orders", request.call_args.args[1])
         self.assertEqual(request.call_args.kwargs["params"]["from"], "2026-10-01")
         self.assertEqual(request.call_args.kwargs["params"]["to"], "2026-10-22")
         self.assertEqual(request.call_args.kwargs["params"]["actorRole"], "admin")
