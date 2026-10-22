@@ -214,3 +214,24 @@ class OneCCarsContractTests(SimpleTestCase):
             buffer.getvalue(),
         )
         self.assertNotIn("photo", kwargs.args[1])
+
+
+    def test_photo_exactly_five_megabytes_is_accepted(self):
+        picture = SimpleUploadedFile(
+            "car.jpg", b"x" * 5_000_000, content_type="image/jpeg",
+        )
+        fields = {"photo": picture}
+        CarViewSet._prepare_photo(fields)
+
+        import base64
+        self.assertEqual(len(base64.b64decode(fields["photoBase64"])), 5_000_000)
+        self.assertEqual(fields["photoMime"], "image/jpeg")
+        self.assertNotIn("photo", fields)
+
+    def test_photo_over_five_megabytes_is_rejected(self):
+        picture = SimpleUploadedFile(
+            "car.jpg", b"x" * 5_000_001, content_type="image/jpeg",
+        )
+        with self.assertRaises(ValidationError) as error:
+            CarViewSet._prepare_photo({"photo": picture})
+        self.assertIn("5 МБ", str(error.exception))
