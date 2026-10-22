@@ -4,6 +4,7 @@ from rest_framework import routers
 from .views import (
     AppointmentAvailabilityView,
     OrderStatisticsView,
+    OrderStatisticsPeriodsView,
     AppointmentScheduleView,
     OrderStatusViewSet,
     OrderViewSet,
@@ -43,6 +44,7 @@ router.register(r'', OrderViewSet, basename='orders')
 urlpatterns = [
     path('schedule/', AppointmentScheduleView.as_view(), name='appointmentSchedule'),
     path('statistics/', OrderStatisticsView.as_view(), name='orderStatistics'),
+    path('statistics/periods/', OrderStatisticsPeriodsView.as_view(), name='orderStatisticsPeriods'),
     path('availability/', AppointmentAvailabilityView.as_view(), name='appointmentAvailability'),
     path('', include(router.urls)),
 ]
