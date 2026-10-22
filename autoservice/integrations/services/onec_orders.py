@@ -203,6 +203,20 @@ class OneCOrdersClient:
             params={"date": normalized},
         ))
 
+    def statistics(self, actor_id, actor_role, start_date, end_date):
+        """Fetch manager-only aggregates from native 1C; never export all orders."""
+        result = self._request(
+            "GET", "orders/statistics", actor_id=actor_id, actor_role=actor_role,
+            params={"from": start_date.isoformat(), "to": end_date.isoformat()},
+        )
+        if not isinstance(result, dict):
+            raise OneCOrderError("invalid_response", "1С вернула некорректную статистику.")
+        for field in ("period", "summary", "ordersTrend", "statusDistribution",
+                      "topWorkTypes", "weekdayOccupancy"):
+            if field not in result:
+                raise OneCOrderError("invalid_response", "Ответ статистики 1С неполный.")
+        return result
+
     def list_orders(self, actor_id, actor_role, filters=None):
         filters = filters or {}
         unknown = set(filters) - self.LIST_FILTERS
