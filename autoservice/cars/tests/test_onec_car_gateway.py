@@ -3,6 +3,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import UUID
 
+from cars.views import CarViewSet
+
 from django.test import SimpleTestCase
 from rest_framework.exceptions import ValidationError
 
@@ -112,3 +114,59 @@ class OneCCarsContractTests(SimpleTestCase):
         })
         with self.assertRaises(ValidationError):
             _order_payload(request)
+
+    @patch("orders.views.validate_filter_permissions")
+    @patch("cars.views.OneCOrdersClient")
+    @patch.object(CarViewSet, "_get_authorized")
+    def test_car_order_list_page_one_does_not_raise_name_error(
+        self, get_car, gateway, validate_filters,
+    ):
+        get_car.return_value = {"id": CAR}
+        gateway.return_value.car_orders.return_value = []
+        api_request = SimpleNamespace(
+            user=SimpleNamespace(id=UUID(OWNER), pk=UUID(OWNER)),
+            active_role="user",
+            query_params={"page": "1"},
+        )
+
+        response = CarViewSet().orders(api_request, pk=CAR)
+
+        self.assertEqual(response.data["count"], 0)
+        self.assertEqual(response.data["results"], [])
+        validate_filters.assert_called_once_with(api_request)
+        gateway.return_value.car_orders.assert_called_once_with(
+            CAR, UUID(OWNER), "user", filters={},
+        )
+
+    @patch.object(CarViewSet, "_validate_brand_model")
+    @patch.object(CarViewSet, "_decorate")
+    @patch.object(CarViewSet, "_get_authorized")
+    @patch("cars.views.OneCCarsClient")
+    @patch("cars.views.OneCOrdersClient")
+    def test_patch_plate_number_without_photo(
+        self, orders_gateway, cars_gateway, get_car, decorate, validate_brand_model,
+    ):
+        car = {
+            "id": CAR, "status": "active", "ownerId": OWNER,
+            "brand": BRAND, "model": MODEL, "year": 2025,
+            "vin": "", "plate_number": "",
+        }
+        get_car.return_value = car
+        orders_gateway.return_value.car_has_orders.return_value = True
+        cars_gateway.return_value.patch.return_value = {
+            **car, "plate_number": "A550B4",
+        }
+        decorate.side_effect = lambda item, context: item
+        request = SimpleNamespace(
+            user=SimpleNamespace(id=UUID(OWNER), pk=UUID(OWNER)),
+            active_role="user",
+            data={"plate_number": "A550B4"},
+        )
+
+        response = CarViewSet().partial_update(request, pk=CAR)
+
+        self.assertEqual(response.data["plate_number"], "A550B4")
+        cars_gateway.return_value.patch.assert_called_once_with(
+            CAR, {"plate_number": "A550B4"},
+        )
+
