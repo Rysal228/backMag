@@ -82,9 +82,8 @@ class StatisticsPeriodOption(models.Model):
     def clean(self):
         super().clean()
         if self.is_default and not self.enabled:
-            raise ValidationError({
-                "is_default": "Период по умолчанию должен быть включён.",
-            })
+            # Non-field error: Django Admin's list-editable form excludes is_default.
+            raise ValidationError("Период по умолчанию должен быть включён.")
 
     def __str__(self):
         return f"{self.days} дн." + (" (по умолчанию)" if self.is_default else "")
