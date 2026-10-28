@@ -141,10 +141,16 @@ class CarViewSet(viewsets.ViewSet):
 
     def _decorate(self, car, context):
         result = dict(car)
-        owner = get_native_profile(car["ownerId"], context)
-        result["ownerName"] = native_display_name(owner)
-        result["ownerPhone"] = owner["phone"]
         request = context["request"]
+        if request.active_role == UserRole.MECHANIC:
+            # Do not expose the customer's phone through the car detail
+            # loaded by the order page (or car lists) for specialists.
+            result["ownerName"] = ""
+            result["ownerPhone"] = ""
+        else:
+            owner = get_native_profile(car["ownerId"], context)
+            result["ownerName"] = native_display_name(owner)
+            result["ownerPhone"] = owner["phone"]
         result["hasOrders"] = OneCOrdersClient().car_has_orders(
             car["id"], *_actor(request)
         )

@@ -24,6 +24,17 @@ MODEL = "8449407b-315d-4fa9-b058-2727c43a1b78"
 
 @patch.dict("os.environ", {"ONEC_API_USER": "test-account", "ONEC_API_PASSWORD": "test-password"})
 class OneCCarsContractTests(SimpleTestCase):
+    @patch("cars.views.get_native_profile")
+    @patch("cars.views.OneCOrdersClient")
+    def test_mechanic_car_details_do_not_include_owner_contact(self, gateway, lookup):
+        car = {"id": CAR, "ownerId": OWNER, "photo": None}
+        actor = SimpleNamespace(active_role="mechanic", user=SimpleNamespace(id=UUID(OWNER)))
+        result = CarViewSet()._decorate(car, {"request": actor})
+        self.assertEqual(result["ownerPhone"], "")
+        self.assertEqual(result["ownerName"], "")
+        lookup.assert_not_called()
+        gateway.return_value.car_has_orders.assert_called_once()
+
     @patch("integrations.services.onec_cars.requests.request")
     @patch.dict("os.environ", {
         "ONEC_BASE_URL": "http://host.docker.internal:8081",

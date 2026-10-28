@@ -229,11 +229,19 @@ class OneCUsersClient:
         return user
 
 
-    def list_mechanics(self, *, search="", ids=()):
+    def list_mechanics(self, *, search="", ids=(), actor_id=None, actor_role=None):
         """Read only the mechanics roster; 1C performs role/search/ID selection."""
         url = f"{self.base_url}/{self.path.rsplit('/', 1)[0]}/users/mechanics"
         auth = (self.api_user, self.api_password) if self.api_user else None
         params = {"search": search, "ids": ",".join(ids)}
+        full_roster = search == "*"
+        if full_roster:
+            if actor_role != "admin" or not _is_uuid(actor_id):
+                raise OneCUserServiceError(
+                    "forbidden", "Полный список специалистов доступен только менеджеру.",
+                    status_code=403,
+                )
+            params.update({"actorId": str(actor_id), "actorRole": "admin"})
         try:
             response = requests.request(
                 "GET", url, params=params, auth=auth,
@@ -267,7 +275,7 @@ class OneCUsersClient:
                 "onec_list_failed", "Ошибка получения списка специалистов из 1С."
             )
 
-        if not isinstance(body, list) or len(body) > 20:
+        if not isinstance(body, list) or len(body) > (100 if full_roster else 20):
             raise OneCUserServiceError(
                 "onec_invalid_response", "1С вернула некорректный список специалистов."
             )

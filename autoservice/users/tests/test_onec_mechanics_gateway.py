@@ -59,6 +59,26 @@ class OneCMechanicsViewTests(SimpleTestCase):
         )
 
     @patch("users.views.OneCUsersClient")
+    def test_full_roster_requires_active_manager_role(self, client_type):
+        client_type.return_value.list_mechanics.return_value = [mechanic()]
+        for role in ("user", "mechanic"):
+            request = self.factory.get("/api/v1/users/", {"role": "mechanic", "search": "*"})
+            force_authenticate(request, user=self.user, token={"active_role": role})
+            request.active_role = role
+            response = UserListView.as_view()(request)
+            self.assertEqual(response.status_code, 403)
+        client_type.return_value.list_mechanics.assert_not_called()
+
+        request = self.factory.get("/api/v1/users/", {"role": "mechanic", "search": "*"})
+        force_authenticate(request, user=self.user, token={"active_role": "admin"})
+        request.active_role = "admin"
+        response = UserListView.as_view()(request)
+        self.assertEqual(response.status_code, 200)
+        client_type.return_value.list_mechanics.assert_called_once_with(
+            search="*", ids=[], actor_id=self.user.pk, actor_role="admin"
+        )
+
+    @patch("users.views.OneCUsersClient")
     def test_missing_role_filter_is_rejected(self, client_type):
         request = self.factory.get("/api/v1/users/", {"search": "Тест"})
         force_authenticate(request, user=self.user, token={"active_role": "user"})
@@ -79,6 +99,31 @@ class OneCMechanicsViewTests(SimpleTestCase):
 
 
 class OneCMechanicsClientTests(SimpleTestCase):
+    @patch.dict(os.environ, {
+        "ONEC_BASE_URL": "http://host.docker.internal:8081",
+        "ONEC_API_USER": "", "ONEC_API_PASSWORD": "",
+    })
+    @patch("integrations.services.onec_users.requests.request")
+    def test_full_roster_forwards_verified_actor_and_accepts_100(self, sender):
+        sender.return_value = Mock(ok=True, status_code=200, json=lambda: [mechanic()] * 100)
+        result = OneCUsersClient().list_mechanics(
+            search="*", actor_id=USER_ID, actor_role="admin"
+        )
+        self.assertEqual(len(result), 100)
+        self.assertEqual(sender.call_args.kwargs["params"]["actorId"], USER_ID)
+        self.assertEqual(sender.call_args.kwargs["params"]["actorRole"], "admin")
+
+    @patch.dict(os.environ, {
+        "ONEC_BASE_URL": "http://host.docker.internal:8081",
+        "ONEC_API_USER": "", "ONEC_API_PASSWORD": "",
+    })
+    @patch("integrations.services.onec_users.requests.request")
+    def test_full_roster_fails_closed_without_manager(self, sender):
+        with self.assertRaises(OneCUserServiceError) as error:
+            OneCUsersClient().list_mechanics(search="*")
+        self.assertEqual(error.exception.status_code, 403)
+        sender.assert_not_called()
+
     @patch.dict(os.environ, {
         "ONEC_BASE_URL": "http://host.docker.internal:8081",
         "ONEC_ALLOW_UNAUTHENTICATED_INTERNAL": "1",
