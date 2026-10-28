@@ -10,7 +10,7 @@ from rest_framework.exceptions import MethodNotAllowed, PermissionDenied, Valida
 
 from orders.views import (
     OrderViewSet, WorkTypeViewSet, AppointmentAvailabilityView,
-    OrderStatisticsView, OrderStatisticsPeriodsView,
+    OrderStatisticsView, OrderStatisticsPeriodsView, MechanicStatisticsView,
     _order_payload,
 )
 from orders.models import StatisticsPeriodOption
@@ -121,6 +121,24 @@ class OrdersFacadeTests(SimpleTestCase):
         gateway.return_value.statistics.assert_called_once_with(
             ACTOR, "admin", date(2026, 9, 23), date(2026, 10, 22)
         )
+
+
+    @patch("orders.views.OneCOrdersClient")
+    def test_mechanic_stats_scoped_to_current_actor(self, gateway):
+        gateway.return_value.mechanic_statistics.return_value = {
+            "total": 4, "inProgress": 1, "completed": 2
+        }
+        result = MechanicStatisticsView().get(actor(role="mechanic"))
+        self.assertEqual(result.data["total"], 4)
+        gateway.return_value.mechanic_statistics.assert_called_once_with(ACTOR, "mechanic")
+
+    @patch("orders.views.OneCOrdersClient")
+    def test_mechanic_stats_rejects_other_roles_and_forged_id(self, gateway):
+        with self.assertRaises(PermissionDenied):
+            MechanicStatisticsView().get(actor(role="admin"))
+        with self.assertRaises(ValidationError):
+            MechanicStatisticsView().get(actor(role="mechanic", params={"mechanicId": str(ACTOR)}))
+        gateway.assert_not_called()
 
     @patch("orders.views.OneCOrdersClient")
     def test_statistics_rejects_non_manager(self, gateway):

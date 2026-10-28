@@ -218,6 +218,22 @@ class OneCOrdersClient:
                 raise OneCOrderError("invalid_response", "Ответ статистики 1С неполный.")
         return result
 
+    def mechanic_statistics(self, actor_id, actor_role):
+        """All-time personal statistics, calculated inside 1C."""
+        result = self._request(
+            "GET", "statistics/mechanic", actor_id=actor_id, actor_role=actor_role,
+            timeout=30,
+        )
+        if not isinstance(result, dict):
+            raise OneCOrderError("invalid_response", "1С вернула некорректную статистику.")
+        for field in ("total", "inProgress", "completed"):
+            value = result.get(field)
+            if type(value) is not int or value < 0:
+                raise OneCOrderError("invalid_response", "Некорректные показатели статистики.")
+        if result["inProgress"] + result["completed"] > result["total"]:
+            raise OneCOrderError("invalid_response", "Несогласованные показатели статистики.")
+        return {field: result[field] for field in ("total", "inProgress", "completed")}
+
     def list_orders(self, actor_id, actor_role, filters=None):
         filters = filters or {}
         unknown = set(filters) - self.LIST_FILTERS

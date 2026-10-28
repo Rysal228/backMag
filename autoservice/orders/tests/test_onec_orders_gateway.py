@@ -48,6 +48,25 @@ class OneCOrdersGatewayTests(SimpleTestCase):
         self.assertEqual(request.call_args.kwargs["params"]["actorId"], ACTOR)
         self.assertEqual(request.call_args.kwargs["params"]["actorRole"], "user")
 
+
+    @patch("integrations.services.onec_orders.requests.request")
+    def test_mechanic_stats_contract(self, request):
+        request.return_value = api_response({"total": 9, "inProgress": 3, "completed": 4})
+        result = OneCOrdersClient().mechanic_statistics(ACTOR, "mechanic")
+        self.assertEqual(result["completed"], 4)
+        self.assertIn("/statistics/mechanic", request.call_args.args[1])
+        self.assertEqual(request.call_args.kwargs["params"]["actorId"], ACTOR)
+        self.assertEqual(request.call_args.kwargs["params"]["actorRole"], "mechanic")
+
+    @patch("integrations.services.onec_orders.requests.request")
+    def test_mechanic_stats_rejects_invalid_counts(self, request):
+        for data in ({"total": 1, "inProgress": 2, "completed": 1},
+                     {"total": True, "inProgress": 0, "completed": 0},
+                     {"total": 5, "inProgress": -1, "completed": 0}):
+            request.return_value = api_response(data)
+            with self.subTest(data=data), self.assertRaises(OneCOrderError):
+                OneCOrdersClient().mechanic_statistics(ACTOR, "mechanic")
+
     @patch("integrations.services.onec_orders.requests.request")
     def test_create_sends_body_and_actor_separately(self, request):
         request.return_value = api_response(order_record(), 201)
