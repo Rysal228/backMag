@@ -90,8 +90,10 @@ class CarViewSet(viewsets.ViewSet):
         if state != "all":
             records = [x for x in records if x["status"] == state]
 
-        if role in (UserRole.MECHANIC, UserRole.ADMIN):
-            owner_phone = request.query_params.get("owner_phone")
+        owner_phone = request.query_params.get("owner_phone")
+        if owner_phone is not None:
+            if role != UserRole.ADMIN:
+                raise PermissionDenied("Поиск по телефону владельца доступен только менеджеру.")
             if owner_phone:
                 profile = OneCUsersClient().get_user(
                     PhoneNormalizer.normalize(owner_phone)
