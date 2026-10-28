@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'users.apps.UsersConfig',
     'cars.apps.CarsConfig',
     'orders.apps.OrdersConfig',
+    'payments.apps.PaymentsConfig',
     'news.apps.NewsConfig',
     'chats.apps.ChatsConfig',
     'corsheaders',
