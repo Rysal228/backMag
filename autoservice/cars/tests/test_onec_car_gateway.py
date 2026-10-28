@@ -9,7 +9,7 @@ from cars.views import CarViewSet
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase
 from PIL import Image
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from cars.serializers import CarWriteSerializer
 from integrations.services.onec_cars import OneCCarsClient, OneCCarError
@@ -24,6 +24,34 @@ MODEL = "8449407b-315d-4fa9-b058-2727c43a1b78"
 
 @patch.dict("os.environ", {"ONEC_API_USER": "test-account", "ONEC_API_PASSWORD": "test-password"})
 class OneCCarsContractTests(SimpleTestCase):
+    @patch("cars.views.OneCUsersClient")
+    @patch.object(CarViewSet, "_accessible")
+    def test_owner_phone_filter_rejected_for_user_and_mechanic(self, accessible, users):
+        accessible.return_value = []
+        for role in ("user", "mechanic"):
+            with self.subTest(role=role), self.assertRaises(PermissionDenied):
+                request = SimpleNamespace(
+                    active_role=role,
+                    query_params={"owner_phone": "79998887766"},
+                )
+                CarViewSet()._queryset(request)
+        users.assert_not_called()
+
+    @patch("cars.views.OneCUsersClient")
+    @patch.object(CarViewSet, "_accessible")
+    def test_owner_phone_filter_allowed_for_manager(self, accessible, users):
+        accessible.return_value = [
+            {"id": CAR, "ownerId": OWNER, "status": "active", "brandName": "Toyota",
+             "modelName": "Camry"}
+        ]
+        users.return_value.get_user.return_value = {"onecId": OWNER}
+        request = SimpleNamespace(
+            active_role="admin", query_params={"owner_phone": "79998887766"},
+        )
+        cars = CarViewSet()._queryset(request)
+        self.assertEqual(len(cars), 1)
+        users.return_value.get_user.assert_called_once()
+
     @patch("cars.views.get_native_profile")
     @patch("cars.views.OneCOrdersClient")
     def test_mechanic_car_details_do_not_include_owner_contact(self, gateway, lookup):
