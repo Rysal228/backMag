@@ -200,6 +200,18 @@ class OrderStatisticsView(APIView):
         data = OneCOrdersClient().statistics(*_actor(request), from_date, today)
         return Response(data)
 
+class MechanicStatisticsView(APIView):
+    """All-time, per-mechanic stats. Actor identity comes only from JWT."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        if request.active_role != UserRole.MECHANIC:
+            raise PermissionDenied("Статистика специалиста доступна только специалисту.")
+        if set(request.query_params) - {"format"}:
+            raise ValidationError({"query": "Дополнительные параметры запрещены."})
+        return Response(OneCOrdersClient().mechanic_statistics(*_actor(request)))
+
+
 class OrderViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
