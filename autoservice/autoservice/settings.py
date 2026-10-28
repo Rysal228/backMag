@@ -38,6 +38,19 @@ MAX_BOT_API_BASE_URL = os.environ.get(
     'https://platform-api2.max.ru',
 )
 
+# Opt-in background polling. A real 1C manager UUID is required to read orders.
+# Run 'python manage.py poll_order_notifications' every minute through cron.
+MAX_ORDER_NOTIFICATIONS_ENABLED = os.environ.get(
+    "MAX_ORDER_NOTIFICATIONS_ENABLED", "false"
+).lower() in {"1", "true", "yes"}
+MAX_ORDER_NOTIFICATIONS_MANAGER_ID = os.environ.get(
+    "MAX_ORDER_NOTIFICATIONS_MANAGER_ID", ""
+).strip()
+MAX_ORDER_NOTIFICATIONS_PUBLIC_URL = os.environ.get(
+    "MAX_ORDER_NOTIFICATIONS_PUBLIC_URL", ""
+).strip().rstrip("/")
+
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
