@@ -1,8 +1,8 @@
 """Poll authoritative 1C and deliver due MAX notifications (scheduled CLI)."""
-from uuid import UUID
-
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+
+from integrations.services.onec_notifications import OneCNotificationsClient, OneCNotificationError
 
 from orders.services.max_notifications import (
     poll_order_statuses, public_order_url, send_pending_notifications,
@@ -27,13 +27,13 @@ class Command(BaseCommand):
         if not 1 <= options["limit"] <= 1000:
             raise CommandError("--limit должен быть от 1 до 1000.")
         try:
-            UUID(str(settings.MAX_ORDER_NOTIFICATIONS_MANAGER_ID))
+            OneCNotificationsClient()
             # Validate URL before writing queue rows or contacting MAX.
             public_order_url("00000000-0000-0000-0000-000000000000")
-        except (ValueError, TypeError) as exc:
+        except (ValueError, TypeError, OneCNotificationError) as exc:
             raise CommandError(
-                "Укажите UUID менеджера в MAX_ORDER_NOTIFICATIONS_MANAGER_ID "
-                "и корректный HTTPS URL (если задан)."
+                "Проверьте ONEC_NOTIFICATIONS_SERVICE_KEY, адрес 1С "
+                "и корректный HTTPS URL сайта (если задан)."
             ) from exc
 
         if not options["send_only"]:

@@ -12,9 +12,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from integrations.services.onec_cars import OneCCarsClient
-from integrations.services.onec_orders import OneCOrdersClient
-from integrations.services.onec_users import OneCUsersClient
+from integrations.services.onec_notifications import OneCNotificationsClient
 from orders.models import OrderNotificationDelivery, OrderNotificationSnapshot
 from users.auth.max.client import MaxBotClient
 
@@ -69,21 +67,20 @@ def build_message(delivery):
 
 
 def poll_order_statuses():
-    """Observe all orders as a real configured 1C manager.
+    """Observe the read-only service feed without a manager identity.
 
     Initial scan only creates baselines, never spams historical orders.
     One combined delivery is created when either order/work status changed.
     """
-    manager_id = str(UUID(str(settings.MAX_ORDER_NOTIFICATIONS_MANAGER_ID)))
-    orders = OneCOrdersClient().list_orders(manager_id, "admin")
-    cars = OneCCarsClient().list_cars()
-    owners = {str(UUID(str(c["id"]))): str(UUID(str(c["ownerId"]))) for c in cars}
+    orders = OneCNotificationsClient().list_orders()
 
     totals = {"baseline": 0, "queued": 0, "unmapped": 0}
     for order in orders:
         order_id = str(UUID(str(order["id"])))
         car_id = str(UUID(str(order["car"])))
-        owner_id = owners.get(car_id)
+        owner_id = order.get("ownerId")
+        if owner_id:
+            owner_id = str(UUID(str(owner_id)))
         if not owner_id:
             # Fail closed: never guess the customer from a phone or car name.
             totals["unmapped"] += 1
@@ -174,33 +171,26 @@ def send_pending_notifications(limit=100):
                 continue
             processed_owners.add(item.owner_id)
             try:
-                # Verify current native ownership before routing any message.
-                car = OneCCarsClient().get(str(item.car_id))
-                if str(UUID(str(car["ownerId"]))) != str(item.owner_id):
+                # Re-read routing through the same service API, including old queue rows.
+                recipient = OneCNotificationsClient().recipient(str(item.order_id))
+                if (
+                    recipient is None
+                    or not recipient["eligible"]
+                    or recipient["car"] != str(item.car_id)
+                    or recipient["ownerId"] != str(item.owner_id)
+                ):
                     item.state = OrderNotificationDelivery.State.SKIPPED
                     counts["skipped"] += 1
                 else:
-                    user = OneCUsersClient().get_user_by_onec_id(str(item.owner_id))
-                    max_id = user.get("messengerUserId")
-                    if (
-                        user.get("isActive") is not True
-                        or not isinstance(max_id, str)
-                        or not max_id.isascii()
-                        or not max_id.isdigit()
-                        or not 1 <= len(max_id) <= 20
-                    ):
-                        item.state = OrderNotificationDelivery.State.SKIPPED
-                        counts["skipped"] += 1
-                    else:
-                        MaxBotClient().send_message_to_user(
-                            user_id=max_id, text=build_message(item),
-                        )
-                        item.state = OrderNotificationDelivery.State.SENT
-                        item.sent_at = timezone.now()
-                        counts["sent"] += 1
+                    MaxBotClient().send_message_to_user(
+                        user_id=recipient["messengerUserId"], text=build_message(item),
+                    )
+                    item.state = OrderNotificationDelivery.State.SENT
+                    item.sent_at = timezone.now()
+                    counts["sent"] += 1
             except Exception:
                 # No secrets, provider response bodies, phones or MAX IDs in logs.
-                logger.exception("MAX order status delivery failed for queue row %s", identifier)
+                logger.warning("MAX order status delivery failed for queue row %s", identifier)
                 item.attempts += 1
                 if item.attempts >= MAX_ATTEMPTS:
                     item.state = OrderNotificationDelivery.State.FAILED
