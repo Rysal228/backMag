@@ -45,3 +45,6 @@ class StatisticsPeriodOptionAdmin(admin.ModelAdmin):
             request, f"Период {period.days} дн. выбран по умолчанию.",
             level=messages.SUCCESS,
         )
+
+# Register read-only MAX notification journal in Django Admin.
+from . import notification_admin  # noqa: E402,F401

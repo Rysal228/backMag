@@ -5,6 +5,7 @@ Orders, statuses, works, payments and booking records are native 1C data.
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 from users.models import UserRole
 
 
@@ -87,3 +88,58 @@ class StatisticsPeriodOption(models.Model):
 
     def __str__(self):
         return f"{self.days} дн." + (" (по умолчанию)" if self.is_default else "")
+
+
+class OrderNotificationSnapshot(models.Model):
+    """Most recently observed 1C state, not the order source of truth."""
+
+    order_id = models.UUIDField(primary_key=True, serialize=False)
+    car_id = models.UUIDField()
+    owner_id = models.UUIDField()
+    order_code = models.CharField(max_length=80)
+    work_code = models.CharField(max_length=80, blank=True)
+    revision = models.PositiveIntegerField(default=0)
+    observed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Снимок статусов заказа для MAX"
+        verbose_name_plural = "Снимки статусов заказов для MAX"
+
+
+class OrderNotificationDelivery(models.Model):
+    """Durable outgoing notification; never store phone or MAX user id."""
+
+    class State(models.TextChoices):
+        PENDING = "pending", "В очереди"
+        SENT = "sent", "Отправлено"
+        SKIPPED = "skipped", "Нет действующей привязки MAX"
+        FAILED = "failed", "Не доставлено"
+
+    order_id = models.UUIDField(db_index=True)
+    car_id = models.UUIDField()
+    owner_id = models.UUIDField()
+    revision = models.PositiveIntegerField()
+    order_number = models.CharField(max_length=100)
+    car_name = models.CharField(max_length=180)
+    order_code = models.CharField(max_length=80)
+    work_code = models.CharField(max_length=80, blank=True)
+    order_label = models.CharField(max_length=120, blank=True)
+    work_label = models.CharField(max_length=120, blank=True)
+    order_changed = models.BooleanField(default=False)
+    work_changed = models.BooleanField(default=False)
+    state = models.CharField(max_length=12, choices=State.choices, default=State.PENDING)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    next_attempt_at = models.DateTimeField(default=timezone.now, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("created_at", "id")
+        verbose_name = "MAX-уведомление о заказе"
+        verbose_name_plural = "MAX-уведомления о заказах"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("order_id", "revision"),
+                name="unique_order_max_notification_revision",
+            ),
+        ]
