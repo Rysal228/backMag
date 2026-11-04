@@ -8,6 +8,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from integrations.services.onec_notifications import OneCNotificationError
+from notifications.models import MaxNotificationSettings
 
 from orders.models import OrderNotificationDelivery, OrderNotificationSnapshot
 from orders.services.max_notifications import (
@@ -44,9 +45,15 @@ def recipient(owner=OWNER, eligible=True):
 
 @override_settings(
     ONEC_NOTIFICATIONS_SERVICE_KEY="test-key-" + "a" * 48,
-    MAX_ORDER_NOTIFICATIONS_PUBLIC_URL="https://service.example.test",
 )
 class MaxOrderNotificationTests(TestCase):
+    def setUp(self):
+        MaxNotificationSettings.objects.update_or_create(
+            pk=1, defaults={
+                'orders_enabled': True,
+                'site_url': 'https://service.example.test',
+            },
+        )
 
     @patch("orders.services.max_notifications.OneCNotificationsClient")
     def test_initial_scan_is_baseline_and_second_change_queues_once(self, client):
@@ -135,6 +142,20 @@ class MaxOrderNotificationTests(TestCase):
 
     @patch("orders.services.max_notifications.MaxBotClient")
     @patch("orders.services.max_notifications.OneCNotificationsClient")
+    def test_fifth_failed_attempt_is_terminal(self, client, bot):
+        client.return_value.recipient.return_value = recipient()
+        bot.return_value.send_message_to_user.side_effect = RuntimeError('provider error')
+        OrderNotificationDelivery.objects.create(
+            order_id=ORDER, car_id=CAR, owner_id=OWNER, revision=1,
+            order_number="125", car_name="Toyota Camry", order_code="in_progress",
+            order_changed=True,
+        )
+        OrderNotificationDelivery.objects.update(attempts=4)
+        self.assertEqual(send_pending_notifications()['failed'], 1)
+        self.assertEqual(OrderNotificationDelivery.objects.get().state, 'failed')
+
+    @patch("orders.services.max_notifications.MaxBotClient")
+    @patch("orders.services.max_notifications.OneCNotificationsClient")
     def test_send_fails_closed_if_owner_changed(self, client, bot):
         client.return_value.recipient.return_value = recipient(owner=OTHER)
         OrderNotificationDelivery.objects.create(
@@ -179,7 +200,7 @@ class MaxOrderNotificationTests(TestCase):
         self.assertEqual(send_pending_notifications()["skipped"], 1)
         bot.assert_not_called()
 
-    @override_settings(MAX_ORDER_NOTIFICATIONS_ENABLED=True, ONEC_NOTIFICATIONS_SERVICE_KEY="")
+    @override_settings(ONEC_NOTIFICATIONS_SERVICE_KEY="")
     @patch("orders.services.max_notifications.OneCNotificationsClient")
     def test_command_rejects_missing_key_before_poll_or_send(self, client):
         with self.assertRaises(CommandError):

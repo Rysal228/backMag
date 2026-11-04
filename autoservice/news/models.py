@@ -105,7 +105,7 @@ class NewsNotificationDelivery(models.Model):
     class State(models.TextChoices):
         PENDING = 'pending', 'В очереди'
         SENT = 'sent', 'Отправлено'
-        SKIPPED = 'skipped', 'Получатель недоступен'
+        SKIPPED = 'skipped', 'Пропущено'
         FAILED = 'failed', 'Не доставлено'
 
     publication = models.ForeignKey(

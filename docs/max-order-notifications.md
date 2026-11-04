@@ -56,16 +56,14 @@ Endpoint не опубликован через Django для браузера.
    оператору и серверному контексту публикации. При отсутствии настроек или прав
    на чтение служебные методы возвращают 401, а не открывают доступ.
 
-5. В окружение backend добавить то же значение, сохранить существующий токен бота:
+5. В окружение backend добавить тот же служебный ключ, сохранить токен бота:
 
    ```env
-   MAX_ORDER_NOTIFICATIONS_ENABLED=1
    ONEC_NOTIFICATIONS_SERVICE_KEY=СКОПИРОВАННЫЙ_КЛЮЧ
-   MAX_ORDER_NOTIFICATIONS_PUBLIC_URL=https://www.cherser-car.site
    ```
 
    `ONEC_NOTIFICATIONS_SERVICE_KEY`: от 32 до 128 символов `A-Z a-z 0-9 _ -`,
-   чувствителен к регистру. UUID менеджера больше не нужен. URL сайта необязателен.
+   чувствителен к регистру. UUID менеджера больше не нужен.
    Пустого или встроенного ключа по умолчанию нет.
 
 6. Обновить исходники backend поверх #74, пересобрать и **пересоздать** контейнер,
@@ -75,6 +73,16 @@ Endpoint не опубликован через Django для браузера.
    ```bash
    docker exec service-car-backend python manage.py migrate
    docker exec service-car-backend python manage.py check
+   ```
+
+   В Django Admin открыть **Уведомления MAX → Настройки уведомлений MAX**,
+   включить уведомления о статусах заказов и, при необходимости, установить
+   единый HTTPS-адрес сайта. Если переменные `MAX_ORDER_NOTIFICATIONS_ENABLED`
+   и `MAX_ORDER_NOTIFICATIONS_PUBLIC_URL` существовали в окружении в момент
+   первой миграции, их значения переносились автоматически. Подробности —
+   `docs/max-notification-admin.md`. Затем проверить чтение без отправки:
+
+   ```bash
    docker exec service-car-backend python manage.py poll_order_notifications --observe-only
    ```
 
