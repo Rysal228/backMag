@@ -153,41 +153,106 @@ class NewsMaxDeliveryTests(TestCase):
         self.assertEqual(prepare_news_deliveries(), {'prepared': 0, 'queued': 0})
 
     @patch('news.management.commands.poll_news_notifications.OneCNewsRecipientsClient')
-    def test_paused_feature_queues_publications_without_contacting_1c(self, gateway):
-        MaxNotificationSettings.objects.filter(pk=1).update(news_enabled=False)
+    def test_paused_feature_does_not_queue_publications_or_contact_1c(self, gateway):
+        config = MaxNotificationSettings.current()
+        config.news_enabled = False
+        config.save()
         self.publish()
-        self.assertEqual(NewsNotificationBatch.objects.count(), 1)
+        self.assertEqual(NewsNotificationBatch.objects.count(), 0)
         call_command('poll_news_notifications')
-        self.assertIsNone(NewsNotificationBatch.objects.get().prepared_at)
         gateway.assert_not_called()
 
     @patch('news.services.max_notifications.MaxBotClient')
     @patch('news.services.max_notifications.OneCNewsRecipientsClient')
     @patch('news.management.commands.poll_news_notifications.OneCNewsRecipientsClient')
-    def test_paused_publication_delivered_once_after_resuming(self, command_client, service_client, bot):
-        MaxNotificationSettings.objects.filter(pk=1).update(news_enabled=False)
+    def test_paused_publication_is_never_sent_after_resuming(self, command_client, service_client, bot):
+        config = MaxNotificationSettings.current()
+        config.news_enabled = False
+        config.save()
         self.publish(roles=('admin',))
         call_command('poll_news_notifications')
-        self.assertIsNone(NewsNotificationBatch.objects.get().prepared_at)
+        self.assertFalse(NewsNotificationBatch.objects.exists())
         bot.assert_not_called()
-        MaxNotificationSettings.objects.filter(pk=1).update(news_enabled=True)
+        config.news_enabled = True
+        config.save()
         service_client.return_value.list_recipients.return_value = feed()
         call_command('poll_news_notifications')
-        self.assertEqual(NewsNotificationDelivery.objects.get().state, 'sent')
+        self.assertFalse(NewsNotificationDelivery.objects.exists())
+        self.publish(title='После включения', roles=('admin',))
         call_command('poll_news_notifications')
         bot.return_value.send_message_to_user.assert_called_once()
         self.assertEqual(NewsNotificationDelivery.objects.count(), 1)
 
     @patch('news.services.max_notifications.MaxBotClient')
     @patch('news.services.max_notifications.OneCNewsRecipientsClient')
-    def test_admin_retry_limit_controls_failed_state(self, gateway, bot):
-        MaxNotificationSettings.objects.filter(pk=1).update(max_attempts=1)
+    def test_fifth_failed_attempt_is_terminal(self, gateway, bot):
         self.publish(roles=('admin',))
         gateway.return_value.list_recipients.return_value = feed()
         prepare_news_deliveries()
+        NewsNotificationDelivery.objects.update(attempts=4)
         bot.return_value.send_message_to_user.side_effect = RuntimeError('provider error')
         self.assertEqual(send_news_deliveries()['failed'], 1)
         self.assertEqual(NewsNotificationDelivery.objects.get().state, 'failed')
+
+    @patch('news.services.max_notifications.MaxBotClient')
+    @patch('news.services.max_notifications.OneCNewsRecipientsClient')
+    def test_old_pending_and_unprepared_batches_are_discarded_on_reactivation(self, gateway, bot):
+        self.publish(title='Устаревшая очередь', roles=('admin',))
+        gateway.return_value.list_recipients.return_value = feed()
+        self.assertEqual(prepare_news_deliveries()['queued'], 1)
+        old_delivery = NewsNotificationDelivery.objects.get()
+        unprepared = self.publish(title='Устаревшая неразобранная', roles=('admin',))
+
+        config = MaxNotificationSettings.current()
+        config.news_enabled = False
+        config.save()
+        config.news_enabled = True
+        config.save()
+
+        self.assertEqual(prepare_news_deliveries(), {'prepared': 0, 'queued': 0})
+        self.assertEqual(send_news_deliveries()['sent'], 0)
+        old_delivery.refresh_from_db()
+        self.assertEqual(old_delivery.state, NewsNotificationDelivery.State.SKIPPED)
+        self.assertIsNotNone(NewsNotificationBatch.objects.get(news=unprepared).prepared_at)
+        bot.assert_not_called()
+        self.assertEqual(gateway.return_value.list_recipients.call_count, 1)
+
+    @patch('news.services.max_notifications.OneCNewsRecipientsClient')
+    def test_reactivation_during_recipient_lookup_does_not_prepare_old_news(self, gateway):
+        news = self.publish(roles=('admin',))
+
+        def switch_while_fetching():
+            config = MaxNotificationSettings.current()
+            config.news_enabled = False
+            config.save()
+            config.news_enabled = True
+            config.save()
+            return feed()
+
+        gateway.return_value.list_recipients.side_effect = switch_while_fetching
+        self.assertEqual(prepare_news_deliveries(), {'prepared': 0, 'queued': 0})
+        self.assertIsNotNone(NewsNotificationBatch.objects.get(news=news).prepared_at)
+        self.assertFalse(NewsNotificationDelivery.objects.exists())
+
+    @patch('news.services.max_notifications.MaxBotClient')
+    @patch('news.services.max_notifications.OneCNewsRecipientsClient')
+    def test_reactivation_during_send_lookup_discards_old_delivery(self, gateway, bot):
+        self.publish(roles=('admin',))
+        gateway.return_value.list_recipients.return_value = feed()
+        prepare_news_deliveries()
+
+        def switch_while_fetching():
+            config = MaxNotificationSettings.current()
+            config.news_enabled = False
+            config.save()
+            config.news_enabled = True
+            config.save()
+            return feed()
+
+        gateway.return_value.list_recipients.side_effect = switch_while_fetching
+        self.assertEqual(send_news_deliveries()['sent'], 0)
+        self.assertEqual(NewsNotificationDelivery.objects.get().state, 'skipped')
+        bot.assert_not_called()
 
 
 class NewsRecipientsContractTests(SimpleTestCase):

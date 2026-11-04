@@ -131,7 +131,10 @@ def poll_order_statuses():
     return totals
 
 
-def send_pending_notifications(limit=100, *, site_url=None, max_attempts=None):
+MAX_DELIVERY_ATTEMPTS = 5
+
+
+def send_pending_notifications(limit=100, *, site_url=None):
     """Send queued messages with row locks and bounded exponential retry.
 
     A timeout after a successful remote delivery may still duplicate a message:
@@ -139,10 +142,8 @@ def send_pending_notifications(limit=100, *, site_url=None, max_attempts=None):
     """
     if not 1 <= limit <= 1000:
         raise ValueError("Invalid send limit")
-    if site_url is None or max_attempts is None:
-        config = MaxNotificationSettings.current()
-        site_url = config.site_url if site_url is None else site_url
-        max_attempts = config.max_attempts if max_attempts is None else max_attempts
+    if site_url is None:
+        site_url = MaxNotificationSettings.current().site_url
     now = timezone.now()
     ids = list(
         OrderNotificationDelivery.objects.filter(
@@ -194,7 +195,7 @@ def send_pending_notifications(limit=100, *, site_url=None, max_attempts=None):
                 # No secrets, provider response bodies, phones or MAX IDs in logs.
                 logger.warning("MAX order status delivery failed for queue row %s", identifier)
                 item.attempts += 1
-                if item.attempts >= max_attempts:
+                if item.attempts >= MAX_DELIVERY_ATTEMPTS:
                     item.state = OrderNotificationDelivery.State.FAILED
                     counts["failed"] += 1
                 else:

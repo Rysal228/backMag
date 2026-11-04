@@ -12,13 +12,13 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--prepare-only', action='store_true')
         parser.add_argument('--send-only', action='store_true')
-        parser.add_argument('--limit', type=int, default=None)
+        parser.add_argument('--limit', type=int, default=100)
 
     def handle(self, *args, **options):
         if options['prepare_only'] and options['send_only']:
             raise CommandError('Укажите только один из --prepare-only / --send-only.')
         config = MaxNotificationSettings.current()
-        limit = options['limit'] if options['limit'] is not None else config.send_limit
+        limit = options['limit']
         if not 1 <= limit <= 1000:
             raise CommandError('--limit должен быть от 1 до 1000.')
         if not config.news_enabled:
@@ -39,7 +39,7 @@ class Command(BaseCommand):
         if not options['prepare_only']:
             try:
                 result = send_news_deliveries(
-                    limit=limit, site_url=config.site_url, max_attempts=config.max_attempts,
+                    limit=limit, site_url=config.site_url,
                 )
             except Exception as exc:
                 raise CommandError('Не удалось проверить получателей новостей в 1С.') from exc

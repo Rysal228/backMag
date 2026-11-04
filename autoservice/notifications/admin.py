@@ -12,10 +12,9 @@ class MaxNotificationSettingsAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Каналы уведомлений', {
             'fields': ('orders_enabled', 'news_enabled'),
-            'description': 'Выключение приостанавливает отправку, не удаляя очередь.',
+            'description': 'Заказы: очередь приостанавливается. Новости: после включения отправляются только новые публикации.',
         }),
         ('Ссылки в сообщениях', {'fields': ('site_url',)}),
-        ('Параметры доставки', {'fields': ('send_limit', 'max_attempts')}),
         ('Информация', {'fields': ('updated_at',)}),
     )
     readonly_fields = ('updated_at',)

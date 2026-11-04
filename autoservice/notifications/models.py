@@ -2,8 +2,8 @@
 from urllib.parse import urlsplit
 
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 
 def normalize_site_origin(value):
@@ -34,21 +34,14 @@ class MaxNotificationSettings(models.Model):
     )
     news_enabled = models.BooleanField(
         'Уведомления о новых публикациях', default=False,
-        help_text='Если выключено, новые публикации сохраняются в очереди до включения.',
+        help_text='После включения уведомления отправляются только о новых публикациях.',
+    )
+    news_enabled_since = models.DateTimeField(
+        'Последнее включение новостной рассылки', null=True, blank=True, editable=False,
     )
     site_url = models.URLField(
         'Адрес сайта для ссылок', max_length=255, blank=True,
         help_text='Например: https://www.cherser-car.site. Если пусто, ссылки не добавляются.',
-    )
-    send_limit = models.PositiveSmallIntegerField(
-        'Сообщений за запуск', default=100,
-        validators=[MinValueValidator(1), MaxValueValidator(1000)],
-        help_text='Лимит для каждой фоновой команды (от 1 до 1000).',
-    )
-    max_attempts = models.PositiveSmallIntegerField(
-        'Попыток доставки', default=5,
-        validators=[MinValueValidator(1), MaxValueValidator(10)],
-        help_text='Число попыток при временной ошибке MAX (от 1 до 10).',
     )
     updated_at = models.DateTimeField('Последнее изменение', auto_now=True)
 
@@ -71,6 +64,17 @@ class MaxNotificationSettings(models.Model):
     def save(self, *args, **kwargs):
         if self.pk != 1:
             raise ValueError('Допускается только одна запись настроек MAX.')
+        update_fields = kwargs.get('update_fields')
+        if self._state.adding:
+            self.news_enabled_since = timezone.now() if self.news_enabled else None
+        elif update_fields is None or 'news_enabled' in update_fields:
+            previous_enabled = type(self).objects.filter(pk=self.pk).values_list(
+                'news_enabled', flat=True,
+            ).first()
+            if previous_enabled is not None and previous_enabled != self.news_enabled:
+                self.news_enabled_since = timezone.now() if self.news_enabled else None
+                if update_fields is not None:
+                    kwargs['update_fields'] = set(update_fields) | {'news_enabled_since'}
         return super().save(*args, **kwargs)
 
     @classmethod

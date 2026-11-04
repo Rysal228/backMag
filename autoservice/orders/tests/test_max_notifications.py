@@ -142,8 +142,7 @@ class MaxOrderNotificationTests(TestCase):
 
     @patch("orders.services.max_notifications.MaxBotClient")
     @patch("orders.services.max_notifications.OneCNotificationsClient")
-    def test_admin_retry_limit_controls_failed_state(self, client, bot):
-        MaxNotificationSettings.objects.filter(pk=1).update(max_attempts=1)
+    def test_fifth_failed_attempt_is_terminal(self, client, bot):
         client.return_value.recipient.return_value = recipient()
         bot.return_value.send_message_to_user.side_effect = RuntimeError('provider error')
         OrderNotificationDelivery.objects.create(
@@ -151,6 +150,7 @@ class MaxOrderNotificationTests(TestCase):
             order_number="125", car_name="Toyota Camry", order_code="in_progress",
             order_changed=True,
         )
+        OrderNotificationDelivery.objects.update(attempts=4)
         self.assertEqual(send_pending_notifications()['failed'], 1)
         self.assertEqual(OrderNotificationDelivery.objects.get().state, 'failed')
 

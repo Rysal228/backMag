@@ -15,13 +15,13 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--observe-only", action="store_true")
         parser.add_argument("--send-only", action="store_true")
-        parser.add_argument("--limit", type=int, default=None)
+        parser.add_argument("--limit", type=int, default=100)
 
     def handle(self, *args, **options):
         if options["observe_only"] and options["send_only"]:
             raise CommandError("Укажите только один из --observe-only / --send-only.")
         config = MaxNotificationSettings.current()
-        limit = options['limit'] if options['limit'] is not None else config.send_limit
+        limit = options['limit']
         if not 1 <= limit <= 1000:
             raise CommandError("--limit должен быть от 1 до 1000.")
         if not config.orders_enabled:
@@ -49,7 +49,7 @@ class Command(BaseCommand):
 
         if not options["observe_only"]:
             results = send_pending_notifications(
-                limit=limit, site_url=config.site_url, max_attempts=config.max_attempts,
+                limit=limit, site_url=config.site_url,
             )
             self.stdout.write(
                 "MAX: " + ", ".join(f"{key}={value}" for key, value in results.items())
