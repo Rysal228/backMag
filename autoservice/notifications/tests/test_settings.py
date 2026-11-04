@@ -178,8 +178,9 @@ class MaxNotificationAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Уведомления о статусах заказов')
         self.assertContains(response, 'Уведомления о новых публикациях')
-        self.assertContains(response, 'Приглашения оценить обслуживание')
-        self.assertContains(response, 'Отправить приглашение через')
+        self.assertContains(response, 'Оценки и отзывы через MAX')
+        self.assertContains(response, 'Запросить оценку через')
+        self.assertNotContains(response, 'Приглашения оценить обслуживание')
         self.assertNotContains(response, 'Сообщений за запуск')
         self.assertNotContains(response, 'Попыток доставки')
 

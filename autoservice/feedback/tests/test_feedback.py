@@ -173,7 +173,7 @@ class FeedbackTests(TestCase):
         self.assertEqual(post(webhook_event(item)).status_code, 200)
         response = FeedbackResponse.objects.get(invitation=item)
         self.assertEqual(response.rating, 2)
-        self.assertEqual(response.resolution, FeedbackResponse.Resolution.NEW)
+        self.assertEqual(response.rating, 2)
         self.assertIn('не устроило', bot.return_value.answer_callback.call_args.kwargs['text'])
         self.assertEqual(post(webhook_event(item)).status_code, 200)
         self.assertEqual(FeedbackResponse.objects.count(), 1)
@@ -228,7 +228,7 @@ class FeedbackTests(TestCase):
             HTTP_X_MAX_BOT_API_SECRET='fake-webhook-secret-with-good-length',
         )
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(FeedbackResponse.objects.get().resolution, FeedbackResponse.Resolution.RESOLVED)
+        self.assertEqual(FeedbackResponse.objects.get().rating, 3)
         self.assertIn('Хотите дополнить', bot.return_value.answer_callback.call_args.kwargs['text'])
 
     @patch('feedback.views.MaxBotClient')
@@ -290,7 +290,7 @@ class FeedbackTests(TestCase):
         post(msg)
         self.assertEqual(FeedbackResponse.objects.get().comment, '')
 
-    def test_admin_validation_and_editing_only_resolution(self):
+    def test_admin_shows_feedback_without_case_management(self):
         config = MaxNotificationSettings.current()
         config.feedback_low_max = 4
         config.feedback_high_min = 4
@@ -310,6 +310,10 @@ class FeedbackTests(TestCase):
         self.assertEqual(result.status_code, 200)
         self.assertContains(result, 'Средняя')
         self.assertContains(result, 'Низких')
+        self.assertContains(result, 'Оценки и отзывы')
+        self.assertNotContains(result, 'Рассмотрение обращения')
+        self.assertNotContains(result, 'Статус обработки')
+        self.assertNotIn('resolution', [field.name for field in FeedbackResponse._meta.fields])
 
     @patch('feedback.management.commands.poll_feedback_requests.OneCNotificationsClient')
     @patch('feedback.management.commands.poll_feedback_requests.observe_feedback_orders')

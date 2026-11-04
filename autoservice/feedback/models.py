@@ -48,8 +48,8 @@ class FeedbackInvitation(models.Model):
 
     class Meta:
         ordering = ('-created_at', '-pk')
-        verbose_name = 'MAX-приглашение оценить заказ'
-        verbose_name_plural = 'MAX-приглашения оценить заказы'
+        verbose_name = 'MAX-запрос оценки'
+        verbose_name_plural = 'MAX-запросы оценок'
 
     def __str__(self):
         return f'Заказ №{self.order_number}'
@@ -64,11 +64,6 @@ class FeedbackResponse(models.Model):
         CUSTOMER_CANCEL = 'customer_cancel', 'Отменил по личным причинам'
         OTHER = 'other', 'Другая причина'
 
-    class Resolution(models.TextChoices):
-        NEW = 'new', 'Новое обращение'
-        IN_PROGRESS = 'in_progress', 'В работе'
-        RESOLVED = 'resolved', 'Решено'
-
     invitation = models.OneToOneField(
         FeedbackInvitation, on_delete=models.PROTECT, related_name='response',
     )
@@ -81,18 +76,14 @@ class FeedbackResponse(models.Model):
         verbose_name='Причина',
     )
     comment = models.TextField(blank=True, verbose_name='Комментарий')
-    resolution = models.CharField(
-        max_length=12, choices=Resolution.choices,
-        default=Resolution.NEW, verbose_name='Рассмотрение обращения',
-    )
     responded_at = models.DateTimeField(auto_now_add=True)
     comment_user_digest = models.CharField(max_length=64, blank=True, db_index=True)
     comment_until = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ('-responded_at', '-pk')
-        verbose_name = 'Оценка обслуживания'
-        verbose_name_plural = 'Оценки обслуживания'
+        verbose_name = 'Оценка и отзыв'
+        verbose_name_plural = 'Оценки и отзывы'
 
     def __str__(self):
         return f'Заказ №{self.invitation.order_number}: {self.rating}/5'
