@@ -1,9 +1,10 @@
 from django import forms
+from django.conf import settings
 from django.contrib import admin
 
 from users.models import UserRole
 
-from .models import News, NewsRole
+from .models import News, NewsRole, NewsNotificationBatch, NewsNotificationDelivery
 
 
 class NewsAdminForm(forms.ModelForm):
@@ -100,3 +101,43 @@ class NewsAdmin(admin.ModelAdmin):
                     for role in form.cleaned_data.get('roles', [])
                 ],
             )
+
+        # Admin's change form runs inside a DB transaction: the publication
+        # cannot be picked up until both the news and its roles are committed.
+        # Edits do not generate a second announcement.
+        if not change and settings.MAX_NEWS_NOTIFICATIONS_ENABLED:
+            NewsNotificationBatch.objects.create(
+                news=form.instance,
+                title=form.instance.title,
+                excerpt=form.instance.content,
+                is_global=form.instance.is_global,
+                roles=list(form.cleaned_data.get('roles', [])),
+            )
+
+
+class ReadOnlyNewsNotificationAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(NewsNotificationBatch)
+class NewsNotificationBatchAdmin(ReadOnlyNewsNotificationAdmin):
+    list_display = ('title', 'prepared_at', 'created_at')
+    search_fields = ('title', '=news__id')
+    readonly_fields = ('news', 'title', 'excerpt', 'is_global', 'roles',
+                       'created_at', 'prepared_at')
+
+
+@admin.register(NewsNotificationDelivery)
+class NewsNotificationDeliveryAdmin(ReadOnlyNewsNotificationAdmin):
+    list_display = ('publication', 'state', 'attempts', 'created_at', 'sent_at')
+    list_filter = ('state',)
+    search_fields = ('=recipient_id', '=publication__news__id')
+    readonly_fields = ('publication', 'recipient_id', 'state', 'attempts',
+                       'next_attempt_at', 'created_at', 'sent_at')

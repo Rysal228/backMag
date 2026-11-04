@@ -50,6 +50,14 @@ MAX_ORDER_NOTIFICATIONS_PUBLIC_URL = os.environ.get(
     "MAX_ORDER_NOTIFICATIONS_PUBLIC_URL", ""
 ).strip().rstrip("/")
 
+# News broadcasts are opt-in. The existing cron worker is independent.
+MAX_NEWS_NOTIFICATIONS_ENABLED = os.environ.get(
+    "MAX_NEWS_NOTIFICATIONS_ENABLED", "false"
+).lower() in {"1", "true", "yes"}
+MAX_NEWS_NOTIFICATIONS_PUBLIC_URL = os.environ.get(
+    "MAX_NEWS_NOTIFICATIONS_PUBLIC_URL", ""
+).strip().rstrip("/")
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
