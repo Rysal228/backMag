@@ -115,3 +115,38 @@ class OneCNotificationsClient:
         ):
             raise OneCNotificationError("Некорректная MAX-привязка получателя 1С.")
         return result
+
+
+class OneCNewsRecipientsClient(OneCNotificationsClient):
+    """Service-key-only audience feed; no phone, personal name or MAX ID persisted."""
+
+    def __init__(self):
+        super().__init__()
+        self.base = self.base.removesuffix('/orders') + '/news/recipients'
+
+    def list_recipients(self):
+        rows = self._get()
+        if not isinstance(rows, list) or len(rows) > 100000:
+            raise OneCNotificationError('Некорректная лента получателей новостей 1С.')
+        result, seen_max_ids = {}, set()
+        allowed = {'user', 'mechanic', 'admin'}
+        for row in rows:
+            if not isinstance(row, dict) or set(row) != {'id', 'messengerUserId', 'roles'}:
+                raise OneCNotificationError('Некорректный получатель новостей 1С.')
+            identifier = canonical_uuid(row['id'])
+            max_id = row['messengerUserId']
+            roles = row['roles']
+            if (
+                identifier in result
+                or not isinstance(max_id, str)
+                or re.fullmatch(r'[0-9]{1,20}', max_id) is None
+                or max_id in seen_max_ids
+                or not isinstance(roles, list)
+                or not roles
+                or any(not isinstance(role, str) or role not in allowed for role in roles)
+                or len(set(roles)) != len(roles)
+            ):
+                raise OneCNotificationError('Некорректная MAX-привязка или роли получателя 1С.')
+            seen_max_ids.add(max_id)
+            result[identifier] = {'messengerUserId': max_id, 'roles': frozenset(roles)}
+        return result
