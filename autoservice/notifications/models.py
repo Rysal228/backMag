@@ -2,6 +2,7 @@
 from urllib.parse import urlsplit
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -39,6 +40,27 @@ class MaxNotificationSettings(models.Model):
     news_enabled_since = models.DateTimeField(
         'Последнее включение новостной рассылки', null=True, blank=True, editable=False,
     )
+    feedback_enabled = models.BooleanField(
+        'Приглашения оценить обслуживание', default=False,
+        help_text='Только новые закрытия и отмены заказов после включения. Старые заказы не рассылаются.',
+    )
+    feedback_enabled_since = models.DateTimeField(
+        'Последнее включение опросов', null=True, blank=True, editable=False,
+    )
+    feedback_delay_minutes = models.PositiveIntegerField(
+        'Отправить приглашение через, минут', default=30,
+        validators=[MinValueValidator(0), MaxValueValidator(10080)],
+        help_text='Одинаковая задержка для закрытия и отмены заказа (0–10080 минут).',
+    )
+    feedback_low_max = models.PositiveSmallIntegerField(
+        'Низкая оценка: до (включительно)', default=3,
+        validators=[MinValueValidator(1), MaxValueValidator(4)],
+    )
+    feedback_high_min = models.PositiveSmallIntegerField(
+        'Высокая оценка: от (включительно)', default=4,
+        validators=[MinValueValidator(2), MaxValueValidator(5)],
+        help_text='Оценки между этими границами считаются нейтральными.',
+    )
     site_url = models.URLField(
         'Адрес сайта для ссылок', max_length=255, blank=True,
         help_text='Например: https://www.cherser-car.site. Если пусто, ссылки не добавляются.',
@@ -60,6 +82,9 @@ class MaxNotificationSettings(models.Model):
             self.site_url = normalize_site_origin(self.site_url)
         except ValueError as exc:
             raise ValidationError({'site_url': str(exc)}) from exc
+        if self.feedback_low_max is not None and self.feedback_high_min is not None:
+            if self.feedback_low_max >= self.feedback_high_min:
+                raise ValidationError({'feedback_high_min': 'Высокая оценка должна начинаться выше диапазона низких.'})
 
     def save(self, *args, **kwargs):
         if self.pk != 1:
@@ -67,14 +92,23 @@ class MaxNotificationSettings(models.Model):
         update_fields = kwargs.get('update_fields')
         if self._state.adding:
             self.news_enabled_since = timezone.now() if self.news_enabled else None
-        elif update_fields is None or 'news_enabled' in update_fields:
-            previous_enabled = type(self).objects.filter(pk=self.pk).values_list(
-                'news_enabled', flat=True,
+            self.feedback_enabled_since = timezone.now() if self.feedback_enabled else None
+        else:
+            previous = type(self).objects.filter(pk=self.pk).values(
+                'news_enabled', 'feedback_enabled',
             ).first()
-            if previous_enabled is not None and previous_enabled != self.news_enabled:
-                self.news_enabled_since = timezone.now() if self.news_enabled else None
-                if update_fields is not None:
-                    kwargs['update_fields'] = set(update_fields) | {'news_enabled_since'}
+            for enabled_field, since_field in (
+                ('news_enabled', 'news_enabled_since'),
+                ('feedback_enabled', 'feedback_enabled_since'),
+            ):
+                if update_fields is not None and enabled_field not in update_fields:
+                    continue
+                if previous is not None and previous[enabled_field] != getattr(self, enabled_field):
+                    setattr(self, since_field, timezone.now() if getattr(self, enabled_field) else None)
+                    if update_fields is not None:
+                        update_fields = set(update_fields) | {since_field}
+            if update_fields is not None:
+                kwargs['update_fields'] = update_fields
         return super().save(*args, **kwargs)
 
     @classmethod

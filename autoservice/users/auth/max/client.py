@@ -14,7 +14,10 @@ class MaxBotClient:
             base_url or settings.MAX_BOT_API_BASE_URL
         ).rstrip('/')
 
-    def send_message_to_user(self, *, user_id: str, text: str) -> dict:
+    def send_message_to_user(self, *, user_id: str, text: str, attachments=None) -> dict:
+        body = {'text': text}
+        if attachments is not None:
+            body['attachments'] = attachments
         try:
             response = requests.post(
                 f'{self.base_url}/messages',
@@ -23,7 +26,7 @@ class MaxBotClient:
                     'Authorization': self.token,
                     'Content-Type': 'application/json',
                 },
-                json={'text': text},
+                json=body,
                 timeout=10,
             )
             response.raise_for_status()
@@ -38,3 +41,19 @@ class MaxBotClient:
             raise MaxBotApiError(
                 "MAX Bot API returned invalid JSON"
             ) from exc
+
+    def answer_callback(self, *, callback_id: str, text: str, attachments=None) -> dict:
+        # /answers edits the original message and acknowledges the button click.
+        message = {'text': text, 'attachments': attachments if attachments is not None else []}
+        try:
+            response = requests.post(
+                f'{self.base_url}/answers',
+                params={'callback_id': callback_id},
+                headers={'Authorization': self.token, 'Content-Type': 'application/json'},
+                json={'message': message},
+                timeout=10,
+            )
+            response.raise_for_status()
+            return response.json()
+        except (requests.RequestException, ValueError) as exc:
+            raise MaxBotApiError('MAX Bot API callback acknowledgement failed.') from exc
