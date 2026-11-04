@@ -5,19 +5,17 @@ journal. Orders, statuses, and ownership remain authoritative in 1C.
 """
 import logging
 from datetime import timedelta
-from urllib.parse import urlsplit
 from uuid import UUID
 
-from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
 from integrations.services.onec_notifications import OneCNotificationsClient
+from notifications.models import MaxNotificationSettings, normalize_site_origin
 from orders.models import OrderNotificationDelivery, OrderNotificationSnapshot
 from users.auth.max.client import MaxBotClient
 
 logger = logging.getLogger(__name__)
-MAX_ATTEMPTS = 5
 
 # 1C catalog names remain the authoritative Russian display labels.
 # We intentionally do not report payment status here: it can currently be
@@ -39,17 +37,16 @@ def status_details(order):
     )
 
 
-def public_order_url(order_id):
-    base = settings.MAX_ORDER_NOTIFICATIONS_PUBLIC_URL
+def public_order_url(order_id, *, site_url=None):
+    if site_url is None:
+        site_url = MaxNotificationSettings.current().site_url
+    base = normalize_site_origin(site_url)
     if not base:
         return ""
-    parsed = urlsplit(base)
-    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
-        raise ValueError("Public order URL must be an absolute HTTPS URL")
     return f"{base}/appointments/{order_id}"
 
 
-def build_message(delivery):
+def build_message(delivery, *, site_url=None):
     changes = []
     if delivery.order_changed:
         changes.append(f"Статус заказа: {safe_label(delivery.order_label) or delivery.order_code}")
@@ -60,7 +57,7 @@ def build_message(delivery):
         f"{safe_label(delivery.car_name, 180)}\n\n"
         + "\n".join(changes)
     )
-    url = public_order_url(delivery.order_id)
+    url = public_order_url(delivery.order_id, site_url=site_url)
     if url:
         message += f"\n\nПодробнее: {url}"
     return message
@@ -134,7 +131,7 @@ def poll_order_statuses():
     return totals
 
 
-def send_pending_notifications(limit=100):
+def send_pending_notifications(limit=100, *, site_url=None, max_attempts=None):
     """Send queued messages with row locks and bounded exponential retry.
 
     A timeout after a successful remote delivery may still duplicate a message:
@@ -142,6 +139,10 @@ def send_pending_notifications(limit=100):
     """
     if not 1 <= limit <= 1000:
         raise ValueError("Invalid send limit")
+    if site_url is None or max_attempts is None:
+        config = MaxNotificationSettings.current()
+        site_url = config.site_url if site_url is None else site_url
+        max_attempts = config.max_attempts if max_attempts is None else max_attempts
     now = timezone.now()
     ids = list(
         OrderNotificationDelivery.objects.filter(
@@ -183,7 +184,8 @@ def send_pending_notifications(limit=100):
                     counts["skipped"] += 1
                 else:
                     MaxBotClient().send_message_to_user(
-                        user_id=recipient["messengerUserId"], text=build_message(item),
+                        user_id=recipient["messengerUserId"],
+                        text=build_message(item, site_url=site_url),
                     )
                     item.state = OrderNotificationDelivery.State.SENT
                     item.sent_at = timezone.now()
@@ -192,7 +194,7 @@ def send_pending_notifications(limit=100):
                 # No secrets, provider response bodies, phones or MAX IDs in logs.
                 logger.warning("MAX order status delivery failed for queue row %s", identifier)
                 item.attempts += 1
-                if item.attempts >= MAX_ATTEMPTS:
+                if item.attempts >= max_attempts:
                     item.state = OrderNotificationDelivery.State.FAILED
                     counts["failed"] += 1
                 else:

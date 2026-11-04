@@ -1,18 +1,16 @@
 """Durable MAX news announcements, routed by live 1C roles and MAX bindings."""
 import logging
 from datetime import timedelta
-from urllib.parse import urlsplit
 
-from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
 from integrations.services.onec_notifications import OneCNewsRecipientsClient
+from notifications.models import MaxNotificationSettings, normalize_site_origin
 from news.models import NewsNotificationBatch, NewsNotificationDelivery
 from users.auth.max.client import MaxBotClient
 
 logger = logging.getLogger(__name__)
-MAX_ATTEMPTS = 5
 
 # The same hierarchy used by NewsViewSet: an admin reads all role news, a
 # mechanic reads user + mechanic news, and an owner reads user news only.
@@ -32,20 +30,16 @@ def can_read_news(recipient_roles, *, is_global, target_roles):
     )
 
 
-def news_url(news_id):
-    base = settings.MAX_NEWS_NOTIFICATIONS_PUBLIC_URL
+def news_url(news_id, *, site_url=None):
+    if site_url is None:
+        site_url = MaxNotificationSettings.current().site_url
+    base = normalize_site_origin(site_url)
     if not base:
         return ''
-    parsed = urlsplit(base)
-    if (
-        parsed.scheme != 'https' or not parsed.hostname or parsed.username
-        or parsed.password or parsed.query or parsed.fragment or parsed.path not in ('', '/')
-    ):
-        raise ValueError('MAX news URL must be an HTTPS site origin')
     return f'{base}/main?news={news_id}'
 
 
-def build_message(batch):
+def build_message(batch, *, site_url=None):
     title = ' '.join(batch.title.split())[:255]
     # Do not send HTML, arbitrary markup or excessive text to MAX.
     normalized_excerpt = ' '.join(batch.excerpt.split())
@@ -53,7 +47,7 @@ def build_message(batch):
     message = f'📰 ServiceCar · Новая новость\n\n{title}'
     if excerpt:
         message += f'\n\n{excerpt}' + ('…' if len(normalized_excerpt) > 700 else '')
-    url = news_url(batch.news_id)
+    url = news_url(batch.news_id, site_url=site_url)
     if url:
         message += f'\n\nЧитать на сайте: {url}'
     return message
@@ -92,10 +86,14 @@ def prepare_news_deliveries(limit=20):
     return result
 
 
-def send_news_deliveries(limit=100):
+def send_news_deliveries(limit=100, *, site_url=None, max_attempts=None):
     """Revalidate active MAX binding and current news visibility before send."""
     if not 1 <= limit <= 1000:
         raise ValueError('Invalid send limit')
+    if site_url is None or max_attempts is None:
+        config = MaxNotificationSettings.current()
+        site_url = config.site_url if site_url is None else site_url
+        max_attempts = config.max_attempts if max_attempts is None else max_attempts
     ids = list(
         NewsNotificationDelivery.objects.filter(
             state=NewsNotificationDelivery.State.PENDING,
@@ -136,7 +134,8 @@ def send_news_deliveries(limit=100):
             else:
                 try:
                     MaxBotClient().send_message_to_user(
-                        user_id=recipient['messengerUserId'], text=build_message(batch),
+                        user_id=recipient['messengerUserId'],
+                        text=build_message(batch, site_url=site_url),
                     )
                     item.state = NewsNotificationDelivery.State.SENT
                     item.sent_at = timezone.now()
@@ -144,7 +143,7 @@ def send_news_deliveries(limit=100):
                 except Exception:
                     logger.warning('MAX news delivery failed for queue row %s', pk)
                     item.attempts += 1
-                    if item.attempts >= MAX_ATTEMPTS:
+                    if item.attempts >= max_attempts:
                         item.state = NewsNotificationDelivery.State.FAILED
                         counts['failed'] += 1
                     else:

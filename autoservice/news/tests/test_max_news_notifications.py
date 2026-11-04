@@ -3,7 +3,6 @@ from uuid import UUID
 
 from django.contrib import admin
 from django.core.management import call_command
-from django.core.management.base import CommandError
 from django.db import transaction
 from django.test import TestCase, SimpleTestCase, override_settings
 from django.utils import timezone
@@ -11,6 +10,7 @@ from django.utils import timezone
 from integrations.services.onec_notifications import OneCNewsRecipientsClient, OneCNotificationError
 from news.admin import NewsAdmin, NewsAdminForm
 from news.models import News, NewsRole, NewsNotificationBatch, NewsNotificationDelivery
+from notifications.models import MaxNotificationSettings
 from news.services.max_notifications import (
     can_read_news, news_url, prepare_news_deliveries, send_news_deliveries,
 )
@@ -34,11 +34,17 @@ def feed():
 
 
 @override_settings(
-    MAX_NEWS_NOTIFICATIONS_ENABLED=True,
-    MAX_NEWS_NOTIFICATIONS_PUBLIC_URL='https://www.cherser-car.site',
     ONEC_NOTIFICATIONS_SERVICE_KEY='test_' + 'a' * 48,
 )
 class NewsMaxDeliveryTests(TestCase):
+    def setUp(self):
+        MaxNotificationSettings.objects.update_or_create(
+            pk=1, defaults={
+                'news_enabled': True,
+                'site_url': 'https://www.cherser-car.site',
+            },
+        )
+
     def publish(self, *, title='Объявление', content='Приходите в субботу',
                 is_global=False, roles=('mechanic',)):
         form = NewsAdminForm(data={
@@ -146,12 +152,42 @@ class NewsMaxDeliveryTests(TestCase):
         self.assertEqual(prepare_news_deliveries(), {'prepared': 1, 'queued': 0})
         self.assertEqual(prepare_news_deliveries(), {'prepared': 0, 'queued': 0})
 
-    @override_settings(MAX_NEWS_NOTIFICATIONS_ENABLED=False)
-    def test_disabled_feature_does_not_publish(self):
+    @patch('news.management.commands.poll_news_notifications.OneCNewsRecipientsClient')
+    def test_paused_feature_queues_publications_without_contacting_1c(self, gateway):
+        MaxNotificationSettings.objects.filter(pk=1).update(news_enabled=False)
         self.publish()
-        self.assertFalse(NewsNotificationBatch.objects.exists())
-        with self.assertRaises(CommandError):
-            call_command('poll_news_notifications')
+        self.assertEqual(NewsNotificationBatch.objects.count(), 1)
+        call_command('poll_news_notifications')
+        self.assertIsNone(NewsNotificationBatch.objects.get().prepared_at)
+        gateway.assert_not_called()
+
+    @patch('news.services.max_notifications.MaxBotClient')
+    @patch('news.services.max_notifications.OneCNewsRecipientsClient')
+    @patch('news.management.commands.poll_news_notifications.OneCNewsRecipientsClient')
+    def test_paused_publication_delivered_once_after_resuming(self, command_client, service_client, bot):
+        MaxNotificationSettings.objects.filter(pk=1).update(news_enabled=False)
+        self.publish(roles=('admin',))
+        call_command('poll_news_notifications')
+        self.assertIsNone(NewsNotificationBatch.objects.get().prepared_at)
+        bot.assert_not_called()
+        MaxNotificationSettings.objects.filter(pk=1).update(news_enabled=True)
+        service_client.return_value.list_recipients.return_value = feed()
+        call_command('poll_news_notifications')
+        self.assertEqual(NewsNotificationDelivery.objects.get().state, 'sent')
+        call_command('poll_news_notifications')
+        bot.return_value.send_message_to_user.assert_called_once()
+        self.assertEqual(NewsNotificationDelivery.objects.count(), 1)
+
+    @patch('news.services.max_notifications.MaxBotClient')
+    @patch('news.services.max_notifications.OneCNewsRecipientsClient')
+    def test_admin_retry_limit_controls_failed_state(self, gateway, bot):
+        MaxNotificationSettings.objects.filter(pk=1).update(max_attempts=1)
+        self.publish(roles=('admin',))
+        gateway.return_value.list_recipients.return_value = feed()
+        prepare_news_deliveries()
+        bot.return_value.send_message_to_user.side_effect = RuntimeError('provider error')
+        self.assertEqual(send_news_deliveries()['failed'], 1)
+        self.assertEqual(NewsNotificationDelivery.objects.get().state, 'failed')
 
 
 class NewsRecipientsContractTests(SimpleTestCase):
@@ -185,10 +221,9 @@ class NewsRecipientsContractTests(SimpleTestCase):
             with self.subTest(rows=rows), self.assertRaises(OneCNotificationError):
                 OneCNewsRecipientsClient().list_recipients()
 
-    @override_settings(MAX_NEWS_NOTIFICATIONS_PUBLIC_URL='http://evil.invalid')
     def test_http_link_is_not_allowed(self):
         with self.assertRaises(ValueError):
-            news_url(1)
+            news_url(1, site_url='http://evil.invalid')
 
     def test_role_access_matches_feed_visibility(self):
         self.assertFalse(can_read_news({'user'}, is_global=False, target_roles={'mechanic'}))

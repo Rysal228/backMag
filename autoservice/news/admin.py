@@ -1,5 +1,4 @@
 from django import forms
-from django.conf import settings
 from django.contrib import admin
 
 from users.models import UserRole
@@ -105,7 +104,7 @@ class NewsAdmin(admin.ModelAdmin):
         # Admin's change form runs inside a DB transaction: the publication
         # cannot be picked up until both the news and its roles are committed.
         # Edits do not generate a second announcement.
-        if not change and settings.MAX_NEWS_NOTIFICATIONS_ENABLED:
+        if not change:
             NewsNotificationBatch.objects.create(
                 news=form.instance,
                 title=form.instance.title,
