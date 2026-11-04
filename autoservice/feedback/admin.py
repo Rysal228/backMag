@@ -54,22 +54,14 @@ class RatingBandFilter(admin.SimpleListFilter):
 
 
 @admin.register(FeedbackResponse)
-class FeedbackResponseAdmin(admin.ModelAdmin):
+class FeedbackResponseAdmin(ImmutableFeedbackAdmin):
     change_list_template = 'admin/feedback/feedbackresponse/change_list.html'
-    list_display = ('order_number', 'rating', 'rating_band', 'reason', 'outcome',
-                    'resolution', 'responded_at')
-    list_filter = (RatingBandFilter, 'resolution', 'reason', 'invitation__outcome')
-    list_editable = ('resolution',)
+    list_display = ('order_number', 'rating', 'rating_band', 'reason', 'outcome', 'responded_at')
+    list_filter = (RatingBandFilter, 'reason', 'invitation__outcome')
     search_fields = ('invitation__order_number', '=invitation__order_id')
     list_select_related = ('invitation',)
     readonly_fields = ('invitation', 'rating', 'reason', 'comment', 'responded_at')
-    fields = ('invitation', 'rating', 'reason', 'comment', 'responded_at', 'resolution')
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
+    fields = ('invitation', 'rating', 'reason', 'comment', 'responded_at')
 
     @admin.display(description='Заказ')
     def order_number(self, obj):

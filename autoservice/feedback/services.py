@@ -227,7 +227,7 @@ def process_feedback_callback(update):
         return None
     token, action, value = match.groups()
     user_id = str(user['user_id'])
-    result = (callback_id, 'Это приглашение больше недоступно.', [])
+    result = (callback_id, 'Оценка по этому заказу сейчас недоступна.', [])
     with transaction.atomic():
         item = FeedbackInvitation.objects.select_for_update().filter(token=UUID(hex=token)).first()
         if item is None or item.state != FeedbackInvitation.State.SENT:
@@ -261,8 +261,6 @@ def process_feedback_callback(update):
             config = MaxNotificationSettings.current()
             response = FeedbackResponse.objects.create(
                 invitation=item, rating=rating,
-                resolution=(FeedbackResponse.Resolution.NEW if rating <= config.feedback_low_max
-                            else FeedbackResponse.Resolution.RESOLVED),
             )
             if rating <= config.feedback_low_max:
                 return (callback_id,

@@ -41,14 +41,14 @@ class MaxNotificationSettings(models.Model):
         'Последнее включение новостной рассылки', null=True, blank=True, editable=False,
     )
     feedback_enabled = models.BooleanField(
-        'Приглашения оценить обслуживание', default=False,
-        help_text='Только новые закрытия и отмены заказов после включения. Старые заказы не рассылаются.',
+        'Оценки и отзывы через MAX', default=False,
+        help_text='Запрашивать оценку только после новых закрытий и отмен заказов. Старые заказы не рассылаются.',
     )
     feedback_enabled_since = models.DateTimeField(
-        'Последнее включение опросов', null=True, blank=True, editable=False,
+        'Последнее включение сбора оценок', null=True, blank=True, editable=False,
     )
     feedback_delay_minutes = models.PositiveIntegerField(
-        'Отправить приглашение через, минут', default=30,
+        'Запросить оценку через, минут', default=30,
         validators=[MinValueValidator(0), MaxValueValidator(10080)],
         help_text='Одинаковая задержка для закрытия и отмены заказа (0–10080 минут).',
     )

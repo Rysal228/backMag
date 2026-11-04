@@ -12,7 +12,7 @@ class MaxNotificationSettingsAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Каналы уведомлений', {
             'fields': ('orders_enabled', 'news_enabled', 'feedback_enabled'),
-            'description': 'Опросы: новые завершения обслуживания только после включения. Старые приглашения при повторном включении не рассылаются.',
+            'description': 'Оценки: только новые закрытия и отмены после включения. Старые запросы оценки повторно не отправляются.',
         }),
         ('Оценки обслуживания', {
             'fields': ('feedback_delay_minutes', 'feedback_low_max', 'feedback_high_min'),
