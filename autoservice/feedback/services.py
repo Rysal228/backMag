@@ -1,4 +1,3 @@
-"""A per-order, one-shot MAX satisfaction survey for 1C terminal transitions."""
 import hashlib
 import hmac
 import logging
@@ -39,9 +38,9 @@ def _button(item, label, action, value='x'):
 
 def invitation_message(item):
     if item.outcome == 'cancelled':
-        prompt = 'Заказ отменён. Оцените, пожалуйста, общение и взаимодействие с нашим сервисом.'
+        prompt = 'Оцените, пожалуйста, общение и взаимодействие с нашим сервисом.'
     else:
-        prompt = 'Автомобиль выдан владельцу. Насколько вы довольны результатом обслуживания?'
+        prompt = 'Насколько вы довольны результатом обслуживания?'
     text = (
         f'🚘 ServiceCar · Заказ №{safe_label(item.order_number, 100)}\n'
         f'{safe_label(item.car_name, 180)}\n\n{prompt}\n\n'
@@ -61,11 +60,6 @@ def discard_previous_activation(config):
 
 
 def observe_feedback_orders():
-    """Only a transition observed *after* activation can produce an invite.
-
-    The first sighting of a record or the first scan after any re-activation
-    is a baseline; this makes re-enabling safe even after a long pause.
-    """
     config = MaxNotificationSettings.current()
     if not config.feedback_enabled or config.feedback_enabled_since is None:
         return {'baseline': 0, 'queued': 0}
@@ -93,7 +87,7 @@ def observe_feedback_orders():
                 str(state.owner_id) == order['ownerId']
                 and str(state.car_id) == order['car']
             )
-            # Rebuild a baseline after the switch was off. No old event leaks.
+
             fresh = state.observed_at >= config.feedback_enabled_since
             if (fresh and unchanged_owner and previous != code
                     and previous not in TERMINAL and code in TERMINAL):
@@ -221,7 +215,6 @@ def _write_keyboard(item):
 
 
 def process_feedback_callback(update):
-    """Return (callback_id, replacement_text, replacement_attachments) or None."""
     callback = update.get('callback') or {}
     if not isinstance(callback, dict):
         return None
@@ -251,19 +244,19 @@ def process_feedback_callback(update):
         if action == 'decline' and response is None:
             item.state = FeedbackInvitation.State.DECLINED
             item.save(update_fields=['state'])
-            return callback_id, 'Хорошо, не будем вас беспокоить. Спасибо!', []
+            return callback_id, 'Спасибо за потраченное время!', []
         if action == 'rate':
             if value not in ('1', '2', '3', '4', '5'):
                 return result
             if response is not None:
                 if response.comment:
-                    return callback_id, 'Спасибо! Оценка и комментарий уже сохранены.', []
+                    return callback_id, 'Спасибо! Оценка и комментарий отправлены.', []
                 if response.reason:
-                    return callback_id, 'Ваша оценка уже сохранена. Хотите добавить комментарий?', _write_keyboard(item)
+                    return callback_id, 'Ваша оценка сохранена. Хотите добавить комментарий?', _write_keyboard(item)
                 config = MaxNotificationSettings.current()
                 if response.rating <= config.feedback_low_max:
-                    return callback_id, 'Оценка уже сохранена. Что именно вас не устроило?', _reason_keyboard(item)
-                return callback_id, 'Ваша оценка уже сохранена. Хотите добавить комментарий?', _write_keyboard(item)
+                    return callback_id, 'Оценка сохранена. Что именно вас не устроило?', _reason_keyboard(item)
+                return callback_id, 'Ваша оценка сохранена. Хотите добавить комментарий?', _write_keyboard(item)
             rating = int(value)
             config = MaxNotificationSettings.current()
             response = FeedbackResponse.objects.create(
@@ -296,7 +289,6 @@ def process_feedback_callback(update):
         if action == 'write':
             if response.comment:
                 return callback_id, 'Ваш комментарий уже получен. Спасибо!', []
-            # Only the next message from this MAX user in the next 15 minutes.
             FeedbackResponse.objects.filter(comment_user_digest=_user_digest(user_id)).update(
                 comment_user_digest='', comment_until=None,
             )
@@ -304,8 +296,8 @@ def process_feedback_callback(update):
             response.comment_until = min(timezone.now() + COMMENT_WINDOW, item.expires_at)
             response.save(update_fields=['comment_user_digest', 'comment_until'])
             return (callback_id,
-                    'Напишите следующим сообщением ваш комментарий (до 1000 символов). '
-                    'Он дополнит уже сохранённую оценку. На ответ есть 15 минут.', [])
+                    'Оставьте, пожалуйста, следующим сообщением ваш отзыв. '
+                    'На ответ есть 15 минут.', [])
         if action == 'done':
             response.comment_user_digest = ''
             response.comment_until = None
@@ -326,7 +318,6 @@ def process_feedback_text(update):
             or not isinstance(text, str) or not text.strip()
             or not isinstance(recipient.get('chat_id'), int)):
         return None
-    # Do not capture slash commands, OTP requests or accidental empty messages.
     if text.lstrip().startswith('/'):
         return None
     digest = _user_digest(str(user_id))
