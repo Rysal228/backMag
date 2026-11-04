@@ -43,6 +43,7 @@ MAX_BOT_API_BASE_URL = os.environ.get(
 ONEC_NOTIFICATIONS_SERVICE_KEY = os.environ.get(
     "ONEC_NOTIFICATIONS_SERVICE_KEY", ""
 )
+MAX_WEBHOOK_SECRET = os.environ.get('MAX_WEBHOOK_SECRET', '')
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -73,6 +74,7 @@ INSTALLED_APPS = [
     'orders.apps.OrdersConfig',
     'news.apps.NewsConfig',
     'notifications.apps.NotificationsConfig',
+    'feedback.apps.FeedbackConfig',
     'chats.apps.ChatsConfig',
     'corsheaders',
     'rest_framework',

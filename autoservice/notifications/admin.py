@@ -11,14 +11,18 @@ class MaxNotificationSettingsAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('Каналы уведомлений', {
-            'fields': ('orders_enabled', 'news_enabled'),
-            'description': 'Заказы: очередь приостанавливается. Новости: после включения отправляются только новые публикации.',
+            'fields': ('orders_enabled', 'news_enabled', 'feedback_enabled'),
+            'description': 'Опросы: новые завершения обслуживания только после включения. Старые приглашения при повторном включении не рассылаются.',
+        }),
+        ('Оценки обслуживания', {
+            'fields': ('feedback_delay_minutes', 'feedback_low_max', 'feedback_high_min'),
+            'description': 'Единая задержка для закрытых и отменённых заказов. Диапазоны низких и высоких оценок не должны пересекаться.',
         }),
         ('Ссылки в сообщениях', {'fields': ('site_url',)}),
         ('Информация', {'fields': ('updated_at',)}),
     )
     readonly_fields = ('updated_at',)
-    list_display = ('__str__', 'orders_enabled', 'news_enabled', 'updated_at')
+    list_display = ('__str__', 'orders_enabled', 'news_enabled', 'feedback_enabled', 'updated_at')
 
     def has_add_permission(self, request):
         return super().has_add_permission(request) and not MaxNotificationSettings.objects.filter(pk=1).exists()

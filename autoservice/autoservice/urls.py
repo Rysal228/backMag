@@ -15,6 +15,7 @@ urlpatterns = [
     path('api/v1/orders/', include('orders.urls')),
     path('api/v1/chats/', include('chats.urls')),
     path('api/v1/news/', include('news.urls')),
+    path('api/v1/feedback/', include('feedback.urls')),
     path('api/v1/integrations/1c/', include('integrations.urls')),
 ]
 

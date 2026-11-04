@@ -1,0 +1,25 @@
+{% extends "admin/change_list.html" %}
+{% block content %}
+  <div style="display:flex;flex-wrap:wrap;gap:1rem;margin:0 0 1.5rem">
+    <div><strong>Оценок:</strong> {{ feedback_stats.total }}</div>
+    <div><strong>Средняя по всем обращениям:</strong> {{ feedback_stats.average }} / 5</div>
+    <div><strong>Высоких по всем обращениям:</strong> {{ feedback_stats.high_percent }}%</div>
+    <div><strong>Низких:</strong> {{ feedback_stats.low_count }}</div>
+    <div><strong>Ответили на приглашение:</strong> {{ feedback_stats.response_rate }}%</div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:2rem;margin:0 0 1.5rem">
+    <div>
+      <strong>Выданные автомобили</strong>
+      <div>Оценок: {{ feedback_outcomes.closed.count }}</div>
+      <div>Средняя оценка обслуживания: {{ feedback_outcomes.closed.average }} / 5</div>
+      <div>Высоких: {{ feedback_outcomes.closed.high_percent }}%</div>
+    </div>
+    <div>
+      <strong>Отменённые заказы</strong>
+      <div>Оценок: {{ feedback_outcomes.cancelled.count }}</div>
+      <div>Средняя оценка взаимодействия: {{ feedback_outcomes.cancelled.average }} / 5</div>
+      <div>Высоких: {{ feedback_outcomes.cancelled.high_percent }}%</div>
+    </div>
+  </div>
+  {{ block.super }}
+{% endblock %}

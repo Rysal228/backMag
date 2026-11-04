@@ -178,6 +178,8 @@ class MaxNotificationAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Уведомления о статусах заказов')
         self.assertContains(response, 'Уведомления о новых публикациях')
+        self.assertContains(response, 'Приглашения оценить обслуживание')
+        self.assertContains(response, 'Отправить приглашение через')
         self.assertNotContains(response, 'Сообщений за запуск')
         self.assertNotContains(response, 'Попыток доставки')
 
@@ -185,6 +187,8 @@ class MaxNotificationAdminTests(TestCase):
         change_url = reverse('admin:notifications_maxnotificationsettings_change', args=[1])
         result = self.client.post(change_url, {
             'orders_enabled': 'on', 'news_enabled': 'on',
+            'feedback_delay_minutes': '45', 'feedback_low_max': '2',
+            'feedback_high_min': '4', 'feedback_enabled': 'on',
             'site_url': 'https://www.cherser-car.site/',
             '_save': 'Сохранить',
         })
@@ -192,6 +196,10 @@ class MaxNotificationAdminTests(TestCase):
         config = MaxNotificationSettings.current()
         self.assertTrue(config.orders_enabled)
         self.assertTrue(config.news_enabled)
+        self.assertTrue(config.feedback_enabled)
+        self.assertIsNotNone(config.feedback_enabled_since)
+        self.assertEqual(config.feedback_delay_minutes, 45)
+        self.assertEqual((config.feedback_low_max, config.feedback_high_min), (2, 4))
         self.assertIsNotNone(config.news_enabled_since)
         self.assertEqual(config.site_url, 'https://www.cherser-car.site')
         self.assertEqual(MaxNotificationSettings.objects.count(), 1)
@@ -204,6 +212,8 @@ class MaxNotificationAdminTests(TestCase):
         change_url = reverse('admin:notifications_maxnotificationsettings_change', args=[1])
         result = self.client.post(change_url, {
             'orders_enabled': 'on', 'news_enabled': 'on',
+            'feedback_delay_minutes': '30', 'feedback_low_max': '3',
+            'feedback_high_min': '4',
             'site_url': 'http://untrusted.example.com',
             '_save': 'Сохранить',
         })
