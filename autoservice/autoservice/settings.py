@@ -38,25 +38,11 @@ MAX_BOT_API_BASE_URL = os.environ.get(
     'https://platform-api2.max.ru',
 )
 
-# Opt-in background polling authenticated as a service, without a manager UUID.
-# Run 'python manage.py poll_order_notifications' every minute through cron.
-MAX_ORDER_NOTIFICATIONS_ENABLED = os.environ.get(
-    "MAX_ORDER_NOTIFICATIONS_ENABLED", "false"
-).lower() in {"1", "true", "yes"}
+# The notification switches, public URL and delivery limits are stored in
+# Django Admin. The migration imports existing env settings once.
 ONEC_NOTIFICATIONS_SERVICE_KEY = os.environ.get(
     "ONEC_NOTIFICATIONS_SERVICE_KEY", ""
 )
-MAX_ORDER_NOTIFICATIONS_PUBLIC_URL = os.environ.get(
-    "MAX_ORDER_NOTIFICATIONS_PUBLIC_URL", ""
-).strip().rstrip("/")
-
-# News broadcasts are opt-in. The existing cron worker is independent.
-MAX_NEWS_NOTIFICATIONS_ENABLED = os.environ.get(
-    "MAX_NEWS_NOTIFICATIONS_ENABLED", "false"
-).lower() in {"1", "true", "yes"}
-MAX_NEWS_NOTIFICATIONS_PUBLIC_URL = os.environ.get(
-    "MAX_NEWS_NOTIFICATIONS_PUBLIC_URL", ""
-).strip().rstrip("/")
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -86,6 +72,7 @@ INSTALLED_APPS = [
     'cars.apps.CarsConfig',
     'orders.apps.OrdersConfig',
     'news.apps.NewsConfig',
+    'notifications.apps.NotificationsConfig',
     'chats.apps.ChatsConfig',
     'corsheaders',
     'rest_framework',

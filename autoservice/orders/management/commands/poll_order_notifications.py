@@ -1,8 +1,8 @@
 """Poll authoritative 1C and deliver due MAX notifications (scheduled CLI)."""
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from integrations.services.onec_notifications import OneCNotificationsClient, OneCNotificationError
+from notifications.models import MaxNotificationSettings
 
 from orders.services.max_notifications import (
     poll_order_statuses, public_order_url, send_pending_notifications,
@@ -18,18 +18,19 @@ class Command(BaseCommand):
         parser.add_argument("--limit", type=int, default=100)
 
     def handle(self, *args, **options):
-        if not settings.MAX_ORDER_NOTIFICATIONS_ENABLED:
-            raise CommandError(
-                "Включите MAX_ORDER_NOTIFICATIONS_ENABLED=1 после настройки и проверки."
-            )
         if options["observe_only"] and options["send_only"]:
             raise CommandError("Укажите только один из --observe-only / --send-only.")
-        if not 1 <= options["limit"] <= 1000:
+        config = MaxNotificationSettings.current()
+        limit = options['limit']
+        if not 1 <= limit <= 1000:
             raise CommandError("--limit должен быть от 1 до 1000.")
+        if not config.orders_enabled:
+            self.stdout.write('MAX: уведомления о заказах приостановлены в Django Admin.')
+            return
         try:
             OneCNotificationsClient()
             # Validate URL before writing queue rows or contacting MAX.
-            public_order_url("00000000-0000-0000-0000-000000000000")
+            public_order_url("00000000-0000-0000-0000-000000000000", site_url=config.site_url)
         except (ValueError, TypeError, OneCNotificationError) as exc:
             raise CommandError(
                 "Проверьте ONEC_NOTIFICATIONS_SERVICE_KEY, адрес 1С "
@@ -47,7 +48,9 @@ class Command(BaseCommand):
             )
 
         if not options["observe_only"]:
-            results = send_pending_notifications(limit=options["limit"])
+            results = send_pending_notifications(
+                limit=limit, site_url=config.site_url,
+            )
             self.stdout.write(
                 "MAX: " + ", ".join(f"{key}={value}" for key, value in results.items())
             )
