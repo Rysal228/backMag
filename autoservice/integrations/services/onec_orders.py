@@ -193,14 +193,17 @@ class OneCOrdersClient:
             "GET", "order-schedule", actor_id=actor_id, actor_role=actor_role,
         ))
 
-    def availability(self, actor_id, actor_role, target_date):
+    def availability(self, actor_id, actor_role, target_date, work_type_ids=None):
         try:
             normalized = date.fromisoformat(str(target_date)).isoformat()
         except (ValueError, TypeError) as exc:
             raise OneCOrderError("invalid_date", "Некорректная дата записи.", 400) from exc
+        params = {"date": normalized}
+        if work_type_ids:
+            params["workTypes"] = ",".join(work_type_ids)
         return self._mapping(self._request(
             "GET", "order-availability", actor_id=actor_id, actor_role=actor_role,
-            params={"date": normalized},
+            params=params,
         ))
 
     def statistics(self, actor_id, actor_role, start_date, end_date):
