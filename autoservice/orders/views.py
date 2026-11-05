@@ -139,7 +139,17 @@ class AppointmentAvailabilityView(APIView):
 
     def get(self, request):
         day = serializers.DateField().run_validation(request.query_params.get("date"))
-        return Response(OneCOrdersClient().availability(*_actor(request), day))
+        raw_works = request.query_params.get("workTypes", "")
+        work_ids = []
+        if raw_works:
+            values = raw_works.split(",")
+            if len(values) > 20:
+                raise serializers.ValidationError({"workTypes": "Не более 20 видов работ."})
+            for value in values:
+                work_ids.append(str(serializers.UUIDField().run_validation(value.strip())))
+            if len(work_ids) != len(set(work_ids)):
+                raise serializers.ValidationError({"workTypes": "Виды работ не должны повторяться."})
+        return Response(OneCOrdersClient().availability(*_actor(request), day, work_ids))
 
 
 def _statistics_periods():

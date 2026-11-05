@@ -102,6 +102,15 @@ class OneCOrdersGatewayTests(SimpleTestCase):
         )
 
     @patch("integrations.services.onec_orders.requests.request")
+    def test_availability_forwards_selected_works(self, request):
+        request.return_value = api_response({"availableSlots": ["09:00"], "plannedDuration": 180})
+        response = OneCOrdersClient().availability(
+            ACTOR, "user", date(2026, 11, 6), [ORDER, OTHER_ORDER]
+        )
+        self.assertEqual(response["plannedDuration"], 180)
+        self.assertEqual(request.call_args.kwargs["params"]["workTypes"], f"{ORDER},{OTHER_ORDER}")
+
+    @patch("integrations.services.onec_orders.requests.request")
     def test_free_text_works_are_rejected_before_http(self, request):
         client = OneCOrdersClient()
         bad_payloads = (

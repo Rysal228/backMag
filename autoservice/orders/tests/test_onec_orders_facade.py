@@ -83,6 +83,25 @@ class OrdersFacadeTests(SimpleTestCase):
         gateway.return_value.availability.return_value = {"availableSlots": ["09:00"]}
         result = AppointmentAvailabilityView().get(actor(params={"date": "2026-10-23"}))
         self.assertEqual(result.data["availableSlots"], ["09:00"])
+        gateway.return_value.availability.assert_called_once_with(ACTOR, "user", date(2026, 10, 23), [])
+
+    @patch("orders.views.OneCOrdersClient")
+    def test_availability_passes_validated_works_to_1c(self, gateway):
+        gateway.return_value.availability.return_value = {"availableSlots": ["09:00"]}
+        AppointmentAvailabilityView().get(actor(params={
+            "date": "2026-11-06", "workTypes": f"{WORK},{ORDER}",
+        }))
+        gateway.return_value.availability.assert_called_once_with(
+            ACTOR, "user", date(2026, 11, 6), [WORK, ORDER]
+        )
+
+    @patch("orders.views.OneCOrdersClient")
+    def test_availability_rejects_duplicate_works(self, gateway):
+        with self.assertRaises(ValidationError):
+            AppointmentAvailabilityView().get(actor(params={
+                "date": "2026-11-06", "workTypes": f"{WORK},{WORK}",
+            }))
+        gateway.assert_not_called()
 
     @patch("orders.views.OneCOrdersClient")
     @patch("orders.views.validate_filter_permissions")
