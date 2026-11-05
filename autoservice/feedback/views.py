@@ -6,6 +6,7 @@ import re
 from datetime import datetime, time, timedelta
 
 from django.conf import settings
+from django.core.paginator import Paginator
 from django.db.models import Avg, Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
@@ -24,6 +25,7 @@ from users.auth.max.client import MaxBotClient
 from users.models import UserRole
 
 logger = logging.getLogger(__name__)
+REVIEWS_PAGE_SIZE = 6
 
 
 class FeedbackStatisticsView(APIView):
@@ -41,8 +43,11 @@ class FeedbackStatisticsView(APIView):
             raise ValidationError({'days': 'В Django не настроены доступные периоды статистики.'})
         days = request.query_params.get('days', str(default_days))
         if (days not in {str(item['days']) for item in periods}
-                or set(request.query_params) - {'days', 'format'}):
+                or set(request.query_params) - {'days', 'page', 'format'}):
             raise ValidationError({'days': 'Выберите период из списка доступных в настройках Django.'})
+        page = request.query_params.get('page', '1')
+        if not page.isascii() or not page.isdigit() or len(page) > 6 or int(page) < 1:
+            raise ValidationError({'page': 'Номер страницы должен быть положительным целым числом.'})
 
         now = timezone.now()
         end_day = timezone.localdate(now)
@@ -84,7 +89,11 @@ class FeedbackStatisticsView(APIView):
                 if values['count'] else 0,
             })
 
-        recent = responses.select_related('invitation').order_by('-responded_at', '-pk')[:10]
+        paginator = Paginator(
+            responses.select_related('invitation').order_by('-responded_at', '-pk'),
+            REVIEWS_PAGE_SIZE,
+        )
+        recent = paginator.get_page(int(page))
         reviews = []
         for item in recent:
             invitation = item.invitation
@@ -119,6 +128,12 @@ class FeedbackStatisticsView(APIView):
             ],
             'byOutcome': outcomes,
             'recentReviews': reviews,
+            'reviewsPagination': {
+                'page': recent.number,
+                'pageSize': REVIEWS_PAGE_SIZE,
+                'totalCount': paginator.count,
+                'totalPages': paginator.num_pages if paginator.count else 0,
+            },
         })
 
 
